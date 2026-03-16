@@ -3,819 +3,607 @@
 <head>
   <meta charset="UTF-8">
   <title>Vine Rush - Free HTML5 Game</title>
-  <meta name="description" content="Play Vine Rush - Swipe to dodge multiplying jungle vines and swing through the dense forest.">
+  <meta name="description" content="Play Vine Rush - Swipe to grow your snake vine collecting leaves before time runs out.">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0d1f0d">
-
+  <meta name="theme-color" content="#1a2a0a">
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="Vine Rush - Free HTML5 Game">
-  <meta property="og:description" content="Tap to latch onto vine anchors, swing through gap gates, and survive the jungle corridor!">
+  <meta property="og:description" content="Play Vine Rush - Swipe to grow your snake vine collecting leaves before time runs out.">
   <meta property="og:url" content="https://balinti.github.io/vine-rush/">
-  <meta property="og:image" content="https://balinti.github.io/vine-rush/preview.png">
-
+  <meta property="og:image" content="https://balinti.github.io/vine-rush/og-image.png">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Vine Rush - Free HTML5 Game">
-  <meta name="twitter:description" content="Tap to latch onto vine anchors, swing through gap gates, and survive the jungle corridor!">
-  <meta name="twitter:image" content="https://balinti.github.io/vine-rush/preview.png">
-
-  <!-- AdSense -->
+  <meta name="twitter:description" content="Play Vine Rush - Swipe to grow your snake vine collecting leaves before time runs out.">
+  <meta name="twitter:image" content="https://balinti.github.io/vine-rush/og-image.png">
+  <link rel="canonical" href="https://balinti.github.io/vine-rush/">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4099346100621490" crossorigin="anonymous"></script>
-
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100%; min-height: 100vh;
-      background: #0a160a;
-      display: flex; flex-direction: column; align-items: center;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      color: #c8e6c9;
-      overflow-x: hidden;
-    }
-    #game-wrap {
-      position: relative;
-      width: 100%; max-width: 420px;
-      display: flex; justify-content: center;
-    }
-    canvas {
-      display: block;
-      width: 100%;
-      max-width: 420px;
-      touch-action: none;
-      cursor: pointer;
-    }
-    #seo-section {
-      width: 100%; max-width: 420px;
-      padding: 18px 16px 32px;
-      font-size: 13px;
-      line-height: 1.7;
-      color: #7ba87d;
-    }
-    #seo-section h2 { font-size: 15px; color: #a5d6a7; margin: 14px 0 6px; }
-    #seo-section h3 { font-size: 13px; color: #81c784; margin: 10px 0 4px; }
-    #seo-section p, #seo-section li { margin-bottom: 4px; }
-    #seo-section ul { padding-left: 18px; }
-    #seo-section details { margin-top: 10px; }
-    #seo-section summary { cursor: pointer; color: #a5d6a7; font-weight: 600; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;background:#0a1a04;display:flex;justify-content:center;align-items:center;overflow:hidden;font-family:'Segoe UI',sans-serif}
+    #wrap{position:relative;width:420px;max-width:100vw;height:750px;max-height:100vh}
+    canvas{display:block;width:100%;height:100%;touch-action:none}
   </style>
 </head>
 <body>
-<div id="game-wrap">
-  <canvas id="c"></canvas>
-</div>
-
-<section id="seo-section" aria-label="How to Play Vine Rush">
-  <h2>How to Play Vine Rush</h2>
-  <p>Auto-run through the jungle corridor. Tap or press <strong>Space</strong> to latch onto a vine anchor and swing through the gap in the thorn wall. Land clean for a <em>Clean Cut</em> bonus!</p>
-
-  <h3>Controls</h3>
-  <ul>
-    <li><strong>Tap / Click</strong> — latch onto vine anchor</li>
-    <li><strong>Space or Enter</strong> — latch (keyboard)</li>
-  </ul>
-
-  <h3>Tips</h3>
-  <ul>
-    <li>Wait for the anchor glow to peak before tapping — perfect timing earns combo points.</li>
-    <li>Gates get narrower as your score climbs. Stay focused!</li>
-    <li>Decoy anchors (red outline) appear after score 50 — avoid them or get a weak swing.</li>
-    <li>Near-misses reward sparks; direct hits end your run.</li>
-  </ul>
-
-  <details>
-    <summary>FAQ</summary>
-    <h3>Is Vine Rush free?</h3>
-    <p>Yes — completely free, no download required. Play directly in your browser.</p>
-    <h3>Does it work on mobile?</h3>
-    <p>Yes — optimized for touch on iOS and Android.</p>
-    <h3>How is the high score saved?</h3>
-    <p>Your best score is stored locally in your browser using localStorage.</p>
-  </details>
-</section>
-
+<div id="wrap"><canvas id="c"></canvas></div>
 <script>
 (function(){
 'use strict';
 
-// ── Constants ────────────────────────────────────────────────────
-const LS_KEY = 'vineRushHighScore_v1';
-const SHARE_URL = 'https://balinti.github.io/vine-rush/';
-const W_CSS = 420, H_CSS = 680;
-const DPR = Math.min(window.devicePixelRatio || 1, 2);
-
-// ── Canvas Setup ─────────────────────────────────────────────────
+// ── Canvas setup ─────────────────────────────────────────────────────────────
+const wrap = document.getElementById('wrap');
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-canvas.width = W_CSS * DPR;
-canvas.height = H_CSS * DPR;
-canvas.style.height = H_CSS + 'px';
-ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+const DPR = Math.min(window.devicePixelRatio||1, 2);
+let CW = 420, CH = 750;
 
-// ── State ────────────────────────────────────────────────────────
-const STATE = { START: 0, PLAYING: 1, GAMEOVER: 2 };
-let state = STATE.START;
-let score = 0, combo = 0, best = parseInt(localStorage.getItem(LS_KEY) || '0');
-let hue = 120; // cycling green base
-let shake = { x: 0, y: 0, t: 0 };
-let impactFreeze = 0;
-let lastTime = 0;
-let particles = [];
-let bgBands = initBands();
-let gameTime = 0; // seconds in current game
+function resize(){
+  const r = wrap.getBoundingClientRect();
+  CW = r.width; CH = r.height;
+  canvas.width = CW * DPR; canvas.height = CH * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize);
 
-// ── Player ───────────────────────────────────────────────────────
-const PLAYER_R = 14;
-let player = {};
+// ── Constants ────────────────────────────────────────────────────────────────
+const GRAVITY      = 900;
+const SNAP_RADIUS  = 160;
+const PLAYER_R     = 12;
+const LEAF_R       = 10;
+const THORN_R      = 9;
+const SPIDER_R     = 11;
+const NODE_R       = 9;
+const SCROLL_BASE  = 120;
+const LS_KEY       = 'vineRushHighScore';
 
-// ── Vine / Swing ─────────────────────────────────────────────────
-let anchor = null;   // { x, y, radius (latch window), decoy }
-let swing = null;    // { ax, ay, len, angle, angVel, t }
-let nextAnchorX = 0;
-const LATCH_WINDOW = 70; // px around anchor.x where tap latches
-const SWING_DURATION = 0.55; // seconds
+// ── Game state ───────────────────────────────────────────────────────────────
+let state = 'start'; // 'start' | 'playing' | 'gameover'
+let score, combo, bestScore = parseInt(localStorage.getItem(LS_KEY)||'0', 10);
+let elapsed, phase, cameraX, distance;
+let shakeAmt = 0, shakeX = 0, shakeY = 0;
+let redFlash = 0, hue = 110;
 
-// ── Gate / Thorn wall ────────────────────────────────────────────
-let gates = [];      // { x, gapY, gapH, passed, scored, color }
+// player
+let px, py, pvx, pvy;
+let anchored = false, anchorNode = null;
+let swingAngle = 0, swingAngVel = 0, ropeLen = 0;
 
-// ── Scrolling ────────────────────────────────────────────────────
-let scrollSpeed = 180; // px/s; increases over time
-const SPEED_MAX = 420;
-const SPEED_ACCEL = 4;
+// world
+let nodes, leaves, thorns, walls, spiders;
+let particles, popTexts, speedLines;
+let closeCalls, idCtr;
 
-// ── Helpers ──────────────────────────────────────────────────────
-function lerp(a,b,t){ return a+(b-a)*t; }
-function clamp(v,lo,hi){ return v<lo?lo:v>hi?hi:v; }
-function rnd(a,b){ return a+Math.random()*(b-a); }
-function rndI(a,b){ return Math.floor(rnd(a,b+1)); }
+function mult(){ return 1 + Math.min(4, Math.floor(combo / 5)); }
 
-function initBands(){
-  const b=[];
-  for(let i=0;i<5;i++){
-    b.push({ y: rnd(0,H_CSS), h: rnd(40,120), spd: rnd(20,60), alpha: rnd(0.03,0.09) });
-  }
-  return b;
+// ── Init ─────────────────────────────────────────────────────────────────────
+function initGame(){
+  score = 0; combo = 0; elapsed = 0; phase = 0;
+  cameraX = 0; distance = 0;
+  shakeAmt = 0; shakeX = 0; shakeY = 0; redFlash = 0; hue = 110;
+  anchored = false; anchorNode = null;
+  nodes=[]; leaves=[]; thorns=[]; walls=[]; spiders=[];
+  particles=[]; popTexts=[]; speedLines=[];
+  closeCalls={}; idCtr=0;
+  px = CW * 0.28; py = CH * 0.4;
+  pvx = 80; pvy = 0;
+  for(let i=0;i<8;i++) spawnChunk(i * 180, false);
 }
 
-function getGateGap(){
-  // narrower as game progresses
-  if(score<5)  return 160;
-  if(score<10) return 140;
-  if(score<20) return 120;
-  if(score<35) return 105;
-  if(score<50) return 92;
-  if(score<70) return 82;
-  return Math.max(70, 82 - (score-70)*0.3);
-}
-
-// ── Reset ────────────────────────────────────────────────────────
-function resetGame(){
-  score = 0; combo = 0;
-  hue = 120;
-  shake = {x:0,y:0,t:0};
-  impactFreeze = 0;
-  particles = [];
-  gameTime = 0;
-  scrollSpeed = 180;
-  bgBands = initBands();
-
-  player = {
-    x: W_CSS * 0.22,
-    y: H_CSS * 0.5,
-    vy: 0,
-    vx: 80,
-    onGround: false,
-    dead: false,
-    trail: []
-  };
-
-  gates = [];
-  anchor = null;
-  swing = null;
-
-  // spawn first gate far enough right
-  spawnGate(W_CSS + 180);
-  spawnGate(W_CSS + 180 + gateSpacing());
-  // anchor above upcoming gate
-  spawnAnchor();
-}
-
-function gateSpacing(){
-  return clamp(580 - score * 3, 340, 600);
-}
-
-function spawnGate(x){
-  const gapH = getGateGap();
-  const minY = 80, maxY = H_CSS - 80 - gapH;
-  const gapY = rnd(minY, maxY);
-  const gateHue = hue + (gapH < 90 ? 40 : 0); // shift red for tight gates
-  gates.push({ x, gapY, gapH, passed:false, scored:false, color: `hsl(${gateHue},70%,45%)` });
-}
-
-function spawnAnchor(){
-  if(!gates.length) return;
-  const nextGate = gates.find(g=>!g.passed) || gates[0];
-  const gx = nextGate.x;
-  const ax = clamp(gx - rnd(80,140), player.x+60, W_CSS+40);
-  const ay = nextGate.gapY + nextGate.gapH/2 - rnd(90,150);
-  const isDecoy = score >= 50 && Math.random() < 0.28;
-  anchor = { x: ax, y: clamp(ay, 60, H_CSS*0.45), decoy: isDecoy, glow: 0 };
-  nextAnchorX = ax;
-}
-
-// ── Particles ────────────────────────────────────────────────────
-function spawnParticles(x, y, count, type){
+// ── Spawning ─────────────────────────────────────────────────────────────────
+function spawnChunk(baseX, withHaz){
+  const count = 2 + Math.floor(Math.random()*2);
   for(let i=0;i<count;i++){
-    const angle = Math.random()*Math.PI*2;
-    const spd = type==='death' ? rnd(80,260) : rnd(40,140);
-    const life = type==='death' ? rnd(0.6,1.2) : rnd(0.3,0.7);
-    const h = type==='leaf'  ? rnd(80,140) :
-              type==='spark' ? rnd(40,80)  :
-              type==='death' ? rnd(10,50)  : hue;
-    particles.push({
-      x, y,
-      vx: Math.cos(angle)*spd,
-      vy: Math.sin(angle)*spd,
-      life, maxLife: life,
-      r: type==='leaf' ? rnd(3,7) : rnd(2,5),
-      h, s: 80, l: 65,
-      type
-    });
+    const nx = baseX + 80 + Math.random()*120;
+    const ny = 110 + Math.random()*(CH - 220);
+    const dead = phase >= 4 && Math.random() < 0.1;
+    nodes.push({ x:nx, y:ny, r:NODE_R, dead, id:idCtr++, w:Math.random()*Math.PI*2 });
+    if(!dead && Math.random()<0.72){
+      const gold = phase >= 3 && Math.random() < 0.28;
+      const ang = -Math.PI*0.5 + (Math.random()-0.5)*Math.PI;
+      const d2 = 42 + Math.random()*50;
+      leaves.push({ x:nx+Math.cos(ang)*d2, y:ny+Math.sin(ang)*d2,
+        r:LEAF_R, gold, id:idCtr++, alive:true, bob:Math.random()*Math.PI*2 });
+    }
+  }
+  if(!withHaz) return;
+  if(phase>=1 && Math.random()<0.5+phase*0.06){
+    thorns.push({ x:baseX+90+Math.random()*110, y:80+Math.random()*(CH-160),
+      r:THORN_R, id:idCtr++ });
+  }
+  if(phase>=2 && Math.random()<0.42){
+    const wh = 60 + Math.random()*80;
+    walls.push({ x:baseX+60+Math.random()*80, y:100+Math.random()*(CH-wh-200),
+      w:18, h:wh, id:idCtr++ });
+  }
+  if(phase>=4 && Math.random()<0.38){
+    spiders.push({ x:baseX+100+Math.random()*80, y:100+Math.random()*(CH-200),
+      r:SPIDER_R, id:idCtr++,
+      vx:-(22+Math.random()*32), vy:(Math.random()-0.5)*44,
+      bo:Math.random()*Math.PI*2 });
   }
 }
 
-// ── Swing physics ────────────────────────────────────────────────
-function startSwing(ax, ay){
-  const dx = player.x - ax, dy = player.y - ay;
-  const len = Math.hypot(dx, dy);
-  const angle = Math.atan2(dy, dx);
-  // angular velocity from current player velocity
-  const angVel = (player.vx * (dy/len) - player.vy * (dx/len)) / len;
-  swing = { ax, ay, len, angle, angVel: angVel || 1.8, t: 0 };
-  anchor = null;
-}
-
-function updateSwing(dt){
-  if(!swing) return;
-  swing.t += dt;
-  // pendulum: α = -(g/L) sin θ
-  const G = 600;
-  swing.angVel += -(G / swing.len) * Math.sin(swing.angle) * dt;
-  swing.angVel *= 0.995; // very mild damping
-  swing.angle += swing.angVel * dt;
-
-  player.x = swing.ax + Math.cos(swing.angle) * swing.len;
-  player.y = swing.ay + Math.sin(swing.angle) * swing.len;
-  player.vx = -Math.sin(swing.angle) * swing.angVel * swing.len;
-  player.vy =  Math.cos(swing.angle) * swing.angVel * swing.len;
-
-  // auto-release: at apex or max duration
-  const atApex = Math.abs(swing.angVel) < 0.3 && swing.t > 0.15;
-  if(atApex || swing.t >= SWING_DURATION){
-    swing = null;
-    // launch outward
-  }
-}
-
-// ── Input ─────────────────────────────────────────────────────────
+// ── Input ─────────────────────────────────────────────────────────────────────
 function onInput(){
-  if(state === STATE.START){ state = STATE.PLAYING; resetGame(); return; }
-  if(state === STATE.GAMEOVER){ state = STATE.PLAYING; resetGame(); return; }
-  if(state !== STATE.PLAYING) return;
-  if(impactFreeze > 0) return;
-
-  // try to latch
-  if(!swing && anchor){
-    const dx = Math.abs(player.x - anchor.x);
-    if(dx <= LATCH_WINDOW){
-      if(anchor.decoy){
-        // weak swing — penalize
-        combo = 0;
-        spawnParticles(player.x, player.y, 6, 'spark');
-        startSwing(anchor.x, anchor.y);
-        swing.len *= 0.5; // short weak arc
-      } else {
-        startSwing(anchor.x, anchor.y);
-        spawnParticles(anchor.x, anchor.y, 8, 'leaf');
-      }
-    }
-  }
+  if(state==='start'){ state='playing'; initGame(); return; }
+  if(state==='gameover'){ state='playing'; initGame(); return; }
+  if(state==='playing') toggleAnchor();
 }
+canvas.addEventListener('pointerdown', onInput);
+document.addEventListener('keydown', e=>{
+  if(e.code==='Space'||e.code==='Enter'){ e.preventDefault(); onInput(); }
+});
 
-canvas.addEventListener('pointerdown', e=>{ e.preventDefault(); onInput(); });
-document.addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='Enter'){ e.preventDefault(); onInput(); } });
-
-// ── Update ────────────────────────────────────────────────────────
-function update(dt){
-  if(impactFreeze > 0){ impactFreeze -= dt; return; }
-
-  gameTime += dt;
-  scrollSpeed = Math.min(SPEED_MAX, scrollSpeed + SPEED_ACCEL * dt);
-  hue = (hue + 6 * dt) % 360;
-
-  // update bg bands
-  for(const b of bgBands){
-    b.y -= b.spd * dt;
-    if(b.y + b.h < 0) b.y = H_CSS + b.h;
-  }
-
-  // update particles
-  for(let i=particles.length-1;i>=0;i--){
-    const p=particles[i];
-    p.x += p.vx*dt; p.y += p.vy*dt;
-    p.vy += 180*dt; // gravity
-    p.life -= dt;
-    if(p.life<=0) particles.splice(i,1);
-  }
-
-  // update shake
-  if(shake.t > 0){
-    shake.t -= dt;
-    shake.x = rnd(-6,6) * (shake.t/0.35);
-    shake.y = rnd(-4,4) * (shake.t/0.35);
-    if(shake.t<=0){ shake.x=0; shake.y=0; }
-  }
-
-  // scroll gates left
-  for(const g of gates) g.x -= scrollSpeed * dt;
-  if(anchor) anchor.x -= scrollSpeed * dt;
-
-  // update anchor glow
-  if(anchor){
-    const dx = Math.abs(player.x - anchor.x);
-    anchor.glow = clamp(1 - dx/(LATCH_WINDOW*1.4), 0, 1);
-  }
-
-  // player physics (free flight)
-  if(!swing){
-    player.vy += 460 * dt; // gravity
-    player.vx = lerp(player.vx, scrollSpeed * 0.42, dt * 1.2);
-    player.x += player.vx * dt;
-    player.y += player.vy * dt;
+// ── Anchor ────────────────────────────────────────────────────────────────────
+function toggleAnchor(){
+  if(anchored){
+    anchored = false; anchorNode = null;
+    pvx += 60;
+    if(Math.sqrt(pvx*pvx+pvy*pvy)>200) for(let i=0;i<6;i++) emitSpeedLine();
+    burst(px, py, '#aaffaa', 6, 80);
   } else {
-    updateSwing(dt);
+    const snapR = Math.max(75, SNAP_RADIUS - phase*9);
+    let best=null, bestD=snapR;
+    for(const n of nodes){
+      if(n.dead) continue;
+      const dx=n.x-cameraX-px, dy=n.y-py;
+      const d=Math.sqrt(dx*dx+dy*dy);
+      if(d<bestD){ bestD=d; best=n; }
+    }
+    if(best){
+      anchored=true; anchorNode=best;
+      const dx=best.x-cameraX-px, dy=best.y-py;
+      ropeLen=Math.sqrt(dx*dx+dy*dy);
+      swingAngle=Math.atan2(py-best.y, px-(best.x-cameraX));
+      swingAngVel=(pvx*Math.cos(swingAngle+Math.PI*0.5)+pvy*Math.sin(swingAngle+Math.PI*0.5))/Math.max(ropeLen,20);
+      shake(2);
+      burst(px, py, '#ffffaa', 8, 90);
+    }
+  }
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+function update(dt){
+  elapsed += dt;
+  phase = elapsed>45?4 : elapsed>25?3 : elapsed>10?2 : elapsed>5?1 : 0;
+
+  const scrollSpeed = SCROLL_BASE + phase*22 + elapsed*0.9;
+  cameraX += scrollSpeed * dt;
+  distance += scrollSpeed * dt;
+  score += scrollSpeed * dt * 0.005 * mult();
+
+  // spawn ahead
+  const maxX = nodes.reduce((m,n)=>Math.max(m,n.x), cameraX);
+  if(maxX < cameraX + CW + 420) spawnChunk(maxX + 40, elapsed > 5);
+
+  // cull
+  const cx = cameraX - 250;
+  nodes   = nodes.filter(n=>n.x>cx);
+  leaves  = leaves.filter(l=>l.alive && l.x>cx);
+  thorns  = thorns.filter(t=>t.x>cx);
+  walls   = walls.filter(w=>w.x>cx);
+  spiders = spiders.filter(s=>s.x>cx);
+
+  // spiders
+  for(const s of spiders){
+    s.x += s.vx*dt;
+    s.y += s.vy*dt + Math.sin(elapsed*2+s.bo)*0.4;
+    if(s.y<50||s.y>CH-50) s.vy*=-1;
   }
 
-  // trail
-  player.trail.push({x:player.x, y:player.y, t:0.18});
-  for(let i=player.trail.length-1;i>=0;i--){
-    player.trail[i].t -= dt;
-    if(player.trail[i].t<=0) player.trail.splice(i,1);
+  // player physics
+  if(anchored && anchorNode){
+    const ax = anchorNode.x - cameraX;
+    const ay = anchorNode.y;
+    swingAngVel += (-GRAVITY/Math.max(ropeLen,20)*Math.sin(swingAngle))*dt;
+    swingAngVel *= 0.998;
+    swingAngle += swingAngVel * dt;
+    ropeLen = Math.min(ropeLen + 18*dt, 230);
+    px = ax + Math.sin(swingAngle)*ropeLen;
+    py = ay - Math.cos(swingAngle)*ropeLen;
+    pvx = swingAngVel*ropeLen*Math.cos(swingAngle);
+    pvy = swingAngVel*ropeLen*Math.sin(swingAngle);
+  } else {
+    pvy += GRAVITY * dt;
+    px  += pvx * dt;
+    py  += pvy * dt;
+    pvx += 28 * dt;
+    pvy *= 0.9995;
   }
 
-  // spawn new gate / anchor when needed
-  const rightmost = gates.reduce((mx,g)=>Math.max(mx,g.x),0);
-  if(rightmost < W_CSS + 60){
-    spawnGate(rightmost + gateSpacing());
-  }
-  if(!anchor && !swing){
-    spawnAnchor();
-  }
+  // camera follow
+  const target = CW * 0.28;
+  const off = px - target;
+  if(off > 0){ cameraX += off*dt*3; px -= off*dt*3; }
 
-  // remove off-screen gates
-  for(let i=gates.length-1;i>=0;i--){
-    if(gates[i].x < -60) gates.splice(i,1);
-  }
+  // boundary
+  if(py<-30||py>CH+80||px<-60){ triggerDeath(); return; }
 
-  // score + near-miss detection
-  for(const g of gates){
-    if(!g.passed && g.x + 8 < player.x){
-      g.passed = true;
-      const inGap = player.y >= g.gapY && player.y <= g.gapY + g.gapH;
-      if(inGap){
-        g.scored = true;
-        score++;
-        combo++;
-        // near-miss: within 12px of edge
-        const distTop = player.y - g.gapY;
-        const distBot = (g.gapY + g.gapH) - player.y;
-        if(distTop < 12 || distBot < 12){
-          combo = Math.max(combo, 1);
-          shake.t = 0.12; shake.x=rnd(-3,3); shake.y=rnd(-2,2);
-          spawnParticles(player.x, player.y, 12, 'spark');
-        } else {
-          // perfect / clean
-          spawnParticles(player.x, player.y, 10, 'leaf');
-        }
-        if(combo >= 3) spawnParticles(player.x, player.y, 6, 'spark');
-        if(score > best){ best = score; localStorage.setItem(LS_KEY, best); }
-      } else {
-        // hit wall — die
-        die();
-        return;
-      }
+  // leaves
+  for(let i=leaves.length-1;i>=0;i--){
+    const l=leaves[i];
+    const lx=l.x-cameraX;
+    const dx=lx-px, dy=l.y-py;
+    if(dx*dx+dy*dy<(PLAYER_R+l.r)*(PLAYER_R+l.r)){
+      leaves.splice(i,1);
+      combo++;
+      const m=mult(), pts=(l.gold?5:1)*m;
+      score+=pts;
+      burst(px,py,l.gold?'#ffd700':'#88ff44',l.gold?12:6,100);
+      addPop(px,py,'+'+(l.gold?5:1)+(m>1?' x'+m:''),l.gold?'#ffd700':'#aaffaa');
     }
   }
 
-  // boundary death
-  if(player.y > H_CSS + 40 || player.y < -60 || player.x < -40){
-    die();
+  // thorns
+  for(const t of thorns){
+    const tx=t.x-cameraX, dx=tx-px, dy=t.y-py;
+    const d=Math.sqrt(dx*dx+dy*dy);
+    if(d<PLAYER_R+t.r-2){ triggerDeath(); return; }
+    if(d<PLAYER_R+t.r+20 && !closeCalls[t.id]){
+      closeCalls[t.id]=1; const pts=2*mult(); score+=pts;
+      addPop(px,py,'CLOSE! +'+pts,'#ff9900');
+    }
   }
-}
-
-function die(){
-  if(player.dead) return;
-  player.dead = true;
-  spawnParticles(player.x, player.y, 28, 'death');
-  shake.t = 0.35;
-  impactFreeze = 0.12;
-  if(score > best){ best = score; localStorage.setItem(LS_KEY, best); }
-  setTimeout(()=>{ state = STATE.GAMEOVER; }, 500);
-}
-
-// ── Draw ──────────────────────────────────────────────────────────
-function draw(){
-  ctx.save();
-  ctx.translate(shake.x, shake.y);
-
-  // background gradient
-  const bg = ctx.createLinearGradient(0,0,0,H_CSS);
-  bg.addColorStop(0, '#040c04');
-  bg.addColorStop(1, '#071207');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0,0,W_CSS,H_CSS);
-
-  // parallax bands
-  for(const b of bgBands){
-    ctx.fillStyle = `hsla(${hue},40%,18%,${b.alpha})`;
-    ctx.fillRect(0, b.y, W_CSS, b.h);
+  // walls
+  for(const w of walls){
+    const wx=w.x-cameraX;
+    const nx2=Math.max(wx,Math.min(px,wx+w.w)), ny2=Math.max(w.y,Math.min(py,w.y+w.h));
+    const dx=px-nx2, dy=py-ny2, d=Math.sqrt(dx*dx+dy*dy);
+    if(d<PLAYER_R-2){ triggerDeath(); return; }
+    if(d<PLAYER_R+14 && !closeCalls[w.id]){
+      closeCalls[w.id]=1; const pts=2*mult(); score+=pts;
+      addPop(px,py,'CLOSE! +'+pts,'#ff9900');
+    }
   }
-
-  if(state === STATE.START){
-    drawStartScreen();
-    ctx.restore();
-    return;
-  }
-
-  // gates
-  for(const g of gates){
-    drawGate(g);
-  }
-
-  // vine rope while swinging
-  if(swing){
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(swing.ax, swing.ay);
-    ctx.lineTo(player.x, player.y);
-    ctx.strokeStyle = `hsla(${hue},70%,40%,0.8)`;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    // anchor dot
-    ctx.beginPath();
-    ctx.arc(swing.ax, swing.ay, 6, 0, Math.PI*2);
-    ctx.fillStyle = `hsl(${hue},80%,60%)`;
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // anchor indicator
-  if(anchor && !swing){
-    drawAnchor(anchor);
-  }
-
-  // trail
-  for(let i=0;i<player.trail.length;i++){
-    const tr = player.trail[i];
-    const alpha = (tr.t/0.18)*0.35;
-    ctx.beginPath();
-    ctx.arc(tr.x, tr.y, PLAYER_R*(tr.t/0.18)*0.7, 0, Math.PI*2);
-    ctx.fillStyle = `hsla(${hue},80%,60%,${alpha})`;
-    ctx.fill();
+  // spiders
+  for(const s of spiders){
+    const sx=s.x-cameraX, dx=sx-px, dy=s.y-py;
+    const d=Math.sqrt(dx*dx+dy*dy);
+    if(d<PLAYER_R+s.r-2){ triggerDeath(); return; }
+    if(d<PLAYER_R+s.r+18 && !closeCalls[s.id]){
+      closeCalls[s.id]=1; const pts=2*mult(); score+=pts;
+      addPop(px,py,'CLOSE! +'+pts,'#ff9900');
+    }
   }
 
   // particles
-  for(const p of particles){
-    const a = p.life/p.maxLife;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r*a, 0, Math.PI*2);
-    ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${a})`;
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=260*dt;
+    p.life-=dt; if(p.life<=0){ particles.splice(i,1); continue; }
+    p.alpha=p.life/p.max;
+  }
+  // pop texts
+  for(let i=popTexts.length-1;i>=0;i--){
+    const t=popTexts[i];
+    t.y-=48*dt; t.life-=dt;
+    if(t.life<=0){ popTexts.splice(i,1); continue; }
+    t.alpha=t.life/t.max;
+    t.sc=1+0.5*(1-t.life/t.max);
+  }
+  // speed lines
+  for(let i=speedLines.length-1;i>=0;i--){
+    const l=speedLines[i]; l.x-=620*dt; l.life-=dt;
+    if(l.life<=0) speedLines.splice(i,1);
+  }
+
+  // shake
+  if(shakeAmt>0){
+    shakeAmt=Math.max(0,shakeAmt-dt*6);
+    shakeX=(Math.random()-0.5)*shakeAmt*2.5;
+    shakeY=(Math.random()-0.5)*shakeAmt*2.5;
+  } else { shakeX=0; shakeY=0; }
+
+  if(redFlash>0) redFlash=Math.max(0,redFlash-dt*3);
+  hue = 110 + (mult()-1)*22 + elapsed*1.6;
+}
+
+// ── Death ─────────────────────────────────────────────────────────────────────
+function triggerDeath(){
+  state='gameover'; anchored=false;
+  const fs=Math.floor(score);
+  if(fs>bestScore){ bestScore=fs; localStorage.setItem(LS_KEY,fs); }
+  shake(14); redFlash=1;
+  for(let i=0;i<32;i++) deathParticle(px,py);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function shake(a){ shakeAmt=Math.max(shakeAmt,a); }
+
+function burst(x,y,color,n,sp){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, s=sp*0.6+Math.random()*sp;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+      color,r:2+Math.random()*3,life:0.45,max:0.45,alpha:1});
+  }
+}
+
+function deathParticle(x,y){
+  const a=Math.random()*Math.PI*2, s=90+Math.random()*220;
+  const h=Math.random()*60;
+  particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+    color:`hsl(${h},100%,60%)`,r:3+Math.random()*5,life:0.9+Math.random()*0.5,max:1.4,alpha:1});
+}
+
+function addPop(x,y,text,color){
+  popTexts.push({x,y:y-22,text,color,life:0.9,max:0.9,alpha:1,sc:1});
+}
+
+function emitSpeedLine(){
+  speedLines.push({x:CW+60,y:50+Math.random()*(CH-100),
+    len:45+Math.random()*90,alpha:0.3+Math.random()*0.4,life:0.3,max:0.3});
+}
+
+// ── Draw ──────────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
+
+  // bg gradient
+  const g=ctx.createLinearGradient(0,0,0,CH);
+  g.addColorStop(0, `hsl(${hue},42%,7%)`);
+  g.addColorStop(1, `hsl(${hue+40},52%,11%)`);
+  ctx.fillStyle=g; ctx.fillRect(0,0,CW,CH);
+
+  // bg silhouettes
+  ctx.save(); ctx.globalAlpha=0.05;
+  ctx.fillStyle=`hsl(${hue+60},60%,30%)`;
+  const off2=cameraX*0.1%200;
+  for(let i=-1;i<Math.ceil(CW/200)+2;i++){
+    const bx=i*200-off2;
+    ctx.beginPath(); ctx.arc(bx,0,90,0,Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx+100,CH,105,Math.PI,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+
+  // speed lines
+  for(const l of speedLines){
+    ctx.save();
+    ctx.globalAlpha=l.alpha*(l.life/l.max);
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(l.x,l.y); ctx.lineTo(l.x+l.len,l.y); ctx.stroke();
+    ctx.restore();
+  }
+
+  // nodes
+  for(const n of nodes){
+    const nx=n.x-cameraX;
+    if(nx<-30||nx>CW+30) continue;
+    n.w+=0.025;
+    const wb=Math.sin(n.w)*2;
+    ctx.save();
+    ctx.shadowColor=n.dead?'#441100':`hsl(${hue+20},80%,50%)`;
+    ctx.shadowBlur=n.dead?4:10;
+    ctx.fillStyle=n.dead?'#553322':`hsl(${hue+20},60%,32%)`;
+    ctx.beginPath(); ctx.arc(nx+wb,n.y,n.r,0,Math.PI*2); ctx.fill();
+    if(!n.dead){
+      ctx.fillStyle=`hsl(${hue+30},90%,65%)`;
+      ctx.beginPath(); ctx.arc(nx+wb-2,n.y-2,3,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // leaves
+  for(const l of leaves){
+    const lx=l.x-cameraX;
+    if(lx<-20||lx>CW+20) continue;
+    l.bob+=0.05;
+    const bob=Math.sin(l.bob)*3;
+    ctx.save();
+    ctx.shadowColor=l.gold?'#ffd700':`hsl(${hue+40},90%,50%)`;
+    ctx.shadowBlur=l.gold?14:7;
+    ctx.fillStyle=l.gold?'#ffd700':`hsl(${hue+40},80%,45%)`;
+    ctx.beginPath(); ctx.ellipse(lx,l.y+bob,l.r*1.3,l.r*0.75,Math.PI*0.25,0,Math.PI*2);
     ctx.fill();
+    ctx.strokeStyle=l.gold?'#ffffa0':'#aaff88'; ctx.lineWidth=1; ctx.stroke();
+    ctx.restore();
+  }
+
+  // thorns
+  for(const t of thorns){
+    const tx=t.x-cameraX;
+    if(tx<-20||tx>CW+20) continue;
+    ctx.save();
+    ctx.shadowColor='#ff3300'; ctx.shadowBlur=10;
+    ctx.fillStyle='#cc1100'; ctx.strokeStyle='#ff5533'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for(let i=0;i<7;i++){
+      const a=(i/7)*Math.PI*2-Math.PI*0.5;
+      const r2=i%2===0?t.r:t.r*0.38;
+      if(i===0) ctx.moveTo(tx+Math.cos(a)*r2,t.y+Math.sin(a)*r2);
+      else ctx.lineTo(tx+Math.cos(a)*r2,t.y+Math.sin(a)*r2);
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // walls
+  for(const w of walls){
+    const wx=w.x-cameraX;
+    if(wx<-30||wx>CW+30) continue;
+    ctx.save();
+    ctx.shadowColor='#773300'; ctx.shadowBlur=7;
+    const wg=ctx.createLinearGradient(wx,0,wx+w.w,0);
+    wg.addColorStop(0,'#441100'); wg.addColorStop(1,'#885533');
+    ctx.fillStyle=wg; ctx.fillRect(wx,w.y,w.w,w.h);
+    ctx.strokeStyle='#aa6633'; ctx.lineWidth=1; ctx.strokeRect(wx,w.y,w.w,w.h);
+    // bark lines
+    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=1;
+    for(let bi=0;bi<Math.floor(w.h/15);bi++){
+      ctx.beginPath(); ctx.moveTo(wx,w.y+bi*15+7); ctx.lineTo(wx+w.w,w.y+bi*15+7); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // spiders
+  for(const s of spiders){
+    const sx=s.x-cameraX;
+    if(sx<-30||sx>CW+30) continue;
+    ctx.save();
+    ctx.shadowColor='#aa00aa'; ctx.shadowBlur=12;
+    // thread
+    ctx.strokeStyle='rgba(180,100,200,0.3)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(sx,s.y); ctx.lineTo(sx,s.y-40); ctx.stroke();
+    // legs
+    ctx.strokeStyle='#aa44bb'; ctx.lineWidth=1.5;
+    for(let i=0;i<8;i++){
+      const la=(i/8)*Math.PI*2;
+      const la2=la+Math.sin(elapsed*5+i)*0.4;
+      ctx.beginPath();
+      ctx.moveTo(sx+Math.cos(la)*s.r, s.y+Math.sin(la)*s.r);
+      ctx.lineTo(sx+Math.cos(la2)*s.r*2.8, s.y+Math.sin(la2)*s.r*2.8);
+      ctx.stroke();
+    }
+    ctx.fillStyle='#220033';
+    ctx.beginPath(); ctx.arc(sx,s.y,s.r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#dd44ff'; ctx.lineWidth=1.5; ctx.stroke();
+    // eyes
+    ctx.fillStyle='#ff44ff';
+    ctx.beginPath(); ctx.arc(sx-3,s.y-2,2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx+3,s.y-2,2,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // vine rope
+  if(anchored && anchorNode){
+    const ax=anchorNode.x-cameraX, ay=anchorNode.y;
+    const spd=Math.sqrt(pvx*pvx+pvy*pvy);
+    const wb=Math.sin(elapsed*8)*3*(spd/200);
+    const mx=(px+ax)*0.5+wb, my=(py+ay)*0.5;
+    ctx.save();
+    ctx.strokeStyle=`hsl(${hue+10},70%,32%)`; ctx.lineWidth=5; ctx.lineCap='round';
+    ctx.shadowColor=`hsl(${hue+10},80%,50%)`; ctx.shadowBlur=5;
+    ctx.beginPath(); ctx.moveTo(px,py); ctx.quadraticCurveTo(mx,my,ax,ay); ctx.stroke();
+    ctx.strokeStyle=`hsl(${hue+25},90%,62%)`; ctx.lineWidth=2; ctx.shadowBlur=0;
+    ctx.beginPath(); ctx.moveTo(px,py); ctx.quadraticCurveTo(mx,my,ax,ay); ctx.stroke();
+    ctx.restore();
   }
 
   // player
-  if(!player.dead){
-    // glow
-    const gl = ctx.createRadialGradient(player.x,player.y,0,player.x,player.y,PLAYER_R*2.2);
-    gl.addColorStop(0, `hsla(${hue},90%,70%,0.35)`);
-    gl.addColorStop(1, 'transparent');
-    ctx.fillStyle = gl;
-    ctx.beginPath(); ctx.arc(player.x,player.y,PLAYER_R*2.2,0,Math.PI*2); ctx.fill();
-    // body
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, PLAYER_R, 0, Math.PI*2);
-    ctx.fillStyle = `hsl(${hue},85%,62%)`;
-    ctx.fill();
-    ctx.strokeStyle = `hsl(${hue},60%,80%)`;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  ctx.save();
+  ctx.shadowColor=`hsl(${hue+30},100%,70%)`; ctx.shadowBlur=22;
+  ctx.strokeStyle=`hsl(${hue+20},90%,65%)`; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(px,py,PLAYER_R+3,0,Math.PI*2); ctx.stroke();
+  const pg=ctx.createRadialGradient(px-3,py-3,1,px,py,PLAYER_R);
+  pg.addColorStop(0, `hsl(${hue+45},100%,82%)`);
+  pg.addColorStop(1, `hsl(${hue},80%,38%)`);
+  ctx.fillStyle=pg;
+  ctx.beginPath(); ctx.arc(px,py,PLAYER_R,0,Math.PI*2); ctx.fill();
+  const spd2=Math.sqrt(pvx*pvx+pvy*pvy);
+  if(spd2>60){
+    ctx.strokeStyle='rgba(255,255,255,0.38)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(px,py);
+    ctx.lineTo(px+pvx/spd2*22, py+pvy/spd2*22); ctx.stroke();
+  }
+  ctx.restore();
+
+  // particles
+  for(const p of particles){
+    ctx.save(); ctx.globalAlpha=p.alpha;
+    ctx.fillStyle=p.color; ctx.shadowColor=p.color; ctx.shadowBlur=5;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // pop texts
+  for(const t of popTexts){
+    ctx.save(); ctx.globalAlpha=t.alpha;
+    ctx.translate(t.x,t.y); ctx.scale(t.sc,t.sc);
+    ctx.fillStyle=t.color; ctx.shadowColor=t.color; ctx.shadowBlur=9;
+    ctx.font='bold 16px "Segoe UI",sans-serif'; ctx.textAlign='center';
+    ctx.fillText(t.text,0,0);
+    ctx.restore();
+  }
+
+  // red flash
+  if(redFlash>0){
+    ctx.save(); ctx.globalAlpha=redFlash*0.42;
+    ctx.fillStyle='#ff0000'; ctx.fillRect(0,0,CW,CH); ctx.restore();
   }
 
   // HUD
-  drawHUD();
-
-  if(state === STATE.GAMEOVER){
-    drawGameOver();
-  }
-
-  ctx.restore();
-}
-
-function drawGate(g){
-  const W = 22;
-  const gateHue = g.gapH < 90 ? (hue+35)%360 : hue;
-
-  // top wall
-  ctx.save();
-  // thorn gradient
-  const gradT = ctx.createLinearGradient(g.x-W/2,0,g.x+W/2,0);
-  gradT.addColorStop(0, `hsl(${gateHue},65%,25%)`);
-  gradT.addColorStop(0.5, `hsl(${gateHue},75%,38%)`);
-  gradT.addColorStop(1, `hsl(${gateHue},65%,25%)`);
-  ctx.fillStyle = gradT;
-  ctx.fillRect(g.x - W/2, 0, W, g.gapY);
-
-  // bottom wall
-  ctx.fillRect(g.x - W/2, g.gapY + g.gapH, W, H_CSS - (g.gapY + g.gapH));
-
-  // thorns on top wall bottom edge
-  drawThorns(g.x - W/2, g.gapY, W, false, gateHue);
-  // thorns on bottom wall top edge
-  drawThorns(g.x - W/2, g.gapY + g.gapH, W, true, gateHue);
-
-  // gap highlight glow
-  const glGap = ctx.createLinearGradient(0,g.gapY,0,g.gapY+g.gapH);
-  glGap.addColorStop(0, `hsla(${gateHue},90%,70%,0.10)`);
-  glGap.addColorStop(0.5, `hsla(${gateHue},90%,70%,0.04)`);
-  glGap.addColorStop(1, `hsla(${gateHue},90%,70%,0.10)`);
-  ctx.fillStyle = glGap;
-  ctx.fillRect(g.x - W/2, g.gapY, W, g.gapH);
-
-  ctx.restore();
-}
-
-function drawThorns(x, y, w, pointUp, h){
-  const count = 4;
-  const tw = w/count;
-  ctx.beginPath();
-  ctx.fillStyle = `hsl(${h},80%,55%)`;
-  for(let i=0;i<count;i++){
-    const tx = x + i*tw;
-    if(pointUp){
-      ctx.moveTo(tx, y);
-      ctx.lineTo(tx+tw/2, y - 10);
-      ctx.lineTo(tx+tw, y);
-    } else {
-      ctx.moveTo(tx, y);
-      ctx.lineTo(tx+tw/2, y + 10);
-      ctx.lineTo(tx+tw, y);
+  if(state==='playing'){
+    ctx.save();
+    ctx.fillStyle='rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.roundRect(8,8,154,52,8); ctx.fill();
+    ctx.fillStyle='#ffffff'; ctx.font='bold 24px "Segoe UI",sans-serif';
+    ctx.textAlign='left'; ctx.fillText(Math.floor(score),18,34);
+    ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='12px "Segoe UI",sans-serif';
+    ctx.fillText('BEST '+bestScore,18,50);
+    if(combo>0){
+      const m=mult();
+      ctx.fillStyle=m>1?`hsl(${hue+20},100%,65%)`:'rgba(255,255,255,0.6)';
+      ctx.font=`bold ${14+m*3}px "Segoe UI",sans-serif`;
+      ctx.textAlign='right';
+      ctx.fillText('x'+m+' COMBO '+combo, CW-12, 36);
     }
+    ctx.restore();
   }
-  ctx.fill();
+
+  ctx.restore(); // shake restore
+
+  // overlay screens (no shake)
+  if(state==='start') drawStart();
+  if(state==='gameover') drawGameOver();
 }
 
-function drawAnchor(a){
-  const glow = a.glow;
-  const r = 10 + glow*6;
-  const ah = a.decoy ? 0 : hue;
-
-  // pulsing ring
+function drawStart(){
   ctx.save();
-  ctx.beginPath();
-  ctx.arc(a.x, a.y, r, 0, Math.PI*2);
-  if(a.decoy){
-    ctx.strokeStyle = `hsla(0,90%,55%,${0.4+glow*0.5})`;
-  } else {
-    ctx.strokeStyle = `hsla(${ah},85%,65%,${0.4+glow*0.5})`;
-  }
-  ctx.lineWidth = 2 + glow*2;
-  ctx.stroke();
-
-  // inner dot
-  ctx.beginPath();
-  ctx.arc(a.x, a.y, 5, 0, Math.PI*2);
-  ctx.fillStyle = a.decoy ? `hsl(0,80%,55%)` : `hsl(${ah},80%,65%)`;
-  ctx.fill();
-
-  // latch window indicator (subtle arc)
-  if(!a.decoy && glow > 0.3){
-    ctx.beginPath();
-    ctx.arc(a.x, a.y, LATCH_WINDOW, -Math.PI/2, Math.PI/2);
-    ctx.strokeStyle = `hsla(${ah},80%,70%,${glow*0.25})`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
+  ctx.fillStyle='rgba(0,0,0,0.58)'; ctx.fillRect(0,0,CW,CH);
+  ctx.textAlign='center';
+  ctx.shadowColor='#44ff44'; ctx.shadowBlur=32;
+  ctx.fillStyle=`hsl(${hue},90%,65%)`; ctx.font='bold 60px "Segoe UI",sans-serif';
+  ctx.fillText('VINE',CW/2,CH*0.34);
+  ctx.fillStyle=`hsl(${hue+40},100%,70%)`; ctx.font='bold 50px "Segoe UI",sans-serif';
+  ctx.fillText('RUSH',CW/2,CH*0.34+62);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(255,255,255,0.68)'; ctx.font='14px "Segoe UI",sans-serif';
+  ctx.fillText('Snap to branches  •  Collect leaves  •  Dodge hazards',CW/2,CH*0.55);
+  const p=0.68+0.32*Math.sin(Date.now()*0.004);
+  ctx.globalAlpha=p; ctx.fillStyle='#ffffff';
+  ctx.font='bold 22px "Segoe UI",sans-serif'; ctx.fillText('TAP TO START',CW/2,CH*0.7);
   ctx.restore();
-}
-
-function drawHUD(){
-  ctx.save();
-  // score
-  ctx.font = 'bold 28px "Segoe UI", system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = `hsl(${hue},70%,80%)`;
-  ctx.fillText(score, W_CSS/2, 44);
-
-  // best
-  ctx.font = '13px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(180,220,180,0.55)';
-  ctx.fillText('BEST ' + best, W_CSS/2, 62);
-
-  // combo
-  if(combo >= 2){
-    ctx.font = `bold ${14+Math.min(combo,6)*2}px "Segoe UI", system-ui, sans-serif`;
-    ctx.fillStyle = `hsl(${hue},90%,70%)`;
-    ctx.fillText('×' + combo + ' COMBO', W_CSS/2, H_CSS - 28);
-  }
-  ctx.restore();
-}
-
-function drawStartScreen(){
-  // title glow
-  ctx.save();
-  ctx.textAlign = 'center';
-
-  // ambient glow behind title
-  const gl = ctx.createRadialGradient(W_CSS/2, H_CSS*0.38, 0, W_CSS/2, H_CSS*0.38, 130);
-  gl.addColorStop(0, `hsla(${hue},80%,40%,0.3)`);
-  gl.addColorStop(1, 'transparent');
-  ctx.fillStyle = gl;
-  ctx.fillRect(0,0,W_CSS,H_CSS);
-
-  ctx.font = 'bold 52px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = `hsl(${hue},85%,70%)`;
-  ctx.shadowColor = `hsl(${hue},90%,50%)`;
-  ctx.shadowBlur = 22;
-  ctx.fillText('VINE', W_CSS/2, H_CSS*0.35);
-  ctx.fillText('RUSH', W_CSS/2, H_CSS*0.35+58);
-  ctx.shadowBlur = 0;
-
-  ctx.font = '16px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(180,230,180,0.8)';
-  ctx.fillText('Swing through the jungle gates', W_CSS/2, H_CSS*0.55);
-
-  // pulsing tap text
-  const pulse = 0.6 + 0.4*Math.sin(Date.now()*0.004);
-  ctx.globalAlpha = pulse;
-  ctx.font = 'bold 18px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = `hsl(${hue},80%,72%)`;
-  ctx.fillText('TAP TO START', W_CSS/2, H_CSS*0.68);
-  ctx.globalAlpha = 1;
-
-  // hint icons (small leaf decorations)
-  drawLeafDecor();
-
-  ctx.restore();
-}
-
-function drawLeafDecor(){
-  const t = Date.now()*0.001;
-  for(let i=0;i<6;i++){
-    const x = (i%2===0?0.2:0.8)*W_CSS + Math.sin(t+i)*12;
-    const y = 0.2*H_CSS + i*60 + Math.cos(t*0.7+i)*8;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 8, 14, t*0.3+i, 0, Math.PI*2);
-    ctx.fillStyle = `hsla(${(hue+i*20)%360},70%,45%,0.35)`;
-    ctx.fill();
-  }
 }
 
 function drawGameOver(){
   ctx.save();
-  // dim overlay
-  ctx.fillStyle = 'rgba(0,0,0,0.62)';
-  ctx.fillRect(0,0,W_CSS,H_CSS);
-
-  ctx.textAlign = 'center';
-
-  ctx.font = 'bold 38px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = `hsl(${hue},75%,65%)`;
-  ctx.shadowColor = `hsl(${hue},80%,40%)`;
-  ctx.shadowBlur = 18;
-  ctx.fillText('GAME OVER', W_CSS/2, H_CSS*0.32);
-  ctx.shadowBlur = 0;
-
-  ctx.font = 'bold 54px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = '#fff';
-  ctx.fillText(score, W_CSS/2, H_CSS*0.45);
-
-  ctx.font = '16px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(180,230,180,0.7)';
-  ctx.fillText('BEST  ' + best, W_CSS/2, H_CSS*0.52);
-
-  if(combo >= 3){
-    ctx.font = '14px "Segoe UI", system-ui, sans-serif';
-    ctx.fillStyle = `hsl(${hue},80%,70%)`;
-    ctx.fillText('MAX COMBO ×' + combo, W_CSS/2, H_CSS*0.58);
+  ctx.fillStyle='rgba(0,0,0,0.62)'; ctx.fillRect(0,0,CW,CH);
+  ctx.textAlign='center';
+  ctx.shadowColor='#ff4422'; ctx.shadowBlur=22;
+  ctx.fillStyle='#ff6644'; ctx.font='bold 48px "Segoe UI",sans-serif';
+  ctx.fillText('GAME OVER',CW/2,CH*0.3);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#ffffff'; ctx.font='bold 34px "Segoe UI",sans-serif';
+  ctx.fillText(Math.floor(score),CW/2,CH*0.45);
+  ctx.fillStyle='rgba(255,255,255,0.52)'; ctx.font='16px "Segoe UI",sans-serif';
+  ctx.fillText('SCORE',CW/2,CH*0.45+24);
+  if(Math.floor(score)>=bestScore && bestScore>0){
+    ctx.fillStyle='#ffd700'; ctx.shadowColor='#ffd700'; ctx.shadowBlur=16;
+    ctx.font='bold 18px "Segoe UI",sans-serif'; ctx.fillText('NEW BEST!',CW/2,CH*0.54);
+    ctx.shadowBlur=0;
+  } else {
+    ctx.fillStyle='rgba(255,255,255,0.48)'; ctx.font='14px "Segoe UI",sans-serif';
+    ctx.fillText('BEST: '+bestScore,CW/2,CH*0.54);
   }
-
-  // retry button
-  const bx = W_CSS/2 - 90, by = H_CSS*0.625, bw = 180, bh = 46;
-  ctx.fillStyle = `hsl(${hue},70%,38%)`;
-  roundRect(ctx, bx, by, bw, bh, 12);
-  ctx.fill();
-  ctx.strokeStyle = `hsl(${hue},70%,60%)`;
-  ctx.lineWidth = 2;
-  roundRect(ctx, bx, by, bw, bh, 12);
-  ctx.stroke();
-
-  ctx.font = 'bold 17px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = '#fff';
-  ctx.fillText('TAP TO RETRY', W_CSS/2, by + bh*0.63);
-
-  // share button
-  const sx = W_CSS/2 - 75, sy = H_CSS*0.625 + 58, sw = 150, sh = 38;
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  roundRect(ctx, sx, sy, sw, sh, 10);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, sx, sy, sw, sh, 10);
-  ctx.stroke();
-  ctx.font = '14px "Segoe UI", system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(200,240,200,0.85)';
-  ctx.fillText('📤 Share Score', W_CSS/2, sy + sh*0.63);
-
+  const p=0.68+0.32*Math.sin(Date.now()*0.004);
+  ctx.globalAlpha=p; ctx.fillStyle='#ffffff';
+  ctx.font='bold 22px "Segoe UI",sans-serif'; ctx.fillText('TAP TO RETRY',CW/2,CH*0.7);
   ctx.restore();
 }
 
-function roundRect(ctx, x, y, w, h, r){
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
-  ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
-  ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
-  ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
-  ctx.closePath();
-}
-
-// ── Share ─────────────────────────────────────────────────────────
-canvas.addEventListener('pointerdown', e=>{
-  if(state !== STATE.GAMEOVER) return;
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = W_CSS / rect.width;
-  const mx = (e.clientX - rect.left) * scaleX;
-  const my = (e.clientY - rect.top) * (H_CSS / rect.height);
-  // share button area
-  const sx = W_CSS/2-75, sy = H_CSS*0.625+58, sw=150, sh=38;
-  if(mx>=sx && mx<=sx+sw && my>=sy && my<=sy+sh){
-    e.stopImmediatePropagation();
-    doShare();
-  }
-},{capture:true});
-
-function doShare(){
-  const msg = `🌿 Vine Rush — I scored ${score}! Can you beat me? Play free: ${SHARE_URL}`;
-  if(navigator.share){
-    navigator.share({ title:'Vine Rush', text:msg, url:SHARE_URL }).catch(()=>{});
-  } else {
-    navigator.clipboard.writeText(msg).then(()=>{
-      showToast('Copied to clipboard!');
-    }).catch(()=>{
-      showToast(msg);
-    });
-  }
-}
-
-// simple toast
-let toastTimer=null;
-function showToast(msg){
-  let el = document.getElementById('vr-toast');
-  if(!el){
-    el = document.createElement('div');
-    el.id='vr-toast';
-    el.style.cssText='position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#a5d6a7;padding:10px 18px;border-radius:20px;font-size:13px;z-index:999;pointer-events:none;transition:opacity 0.3s';
-    document.body.appendChild(el);
-  }
-  el.textContent=msg; el.style.opacity='1';
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>el.style.opacity='0',2400);
-}
-
-// ── Main Loop ─────────────────────────────────────────────────────
+// ── Loop ──────────────────────────────────────────────────────────────────────
+let lastT = 0;
 function loop(ts){
   requestAnimationFrame(loop);
-  const dt = Math.min((ts - lastTime)/1000, 0.05);
-  lastTime = ts;
-  if(state === STATE.PLAYING && !player.dead){
-    update(dt);
-  } else if(state === STATE.PLAYING && player.dead){
-    // update particles/shake during death anim
-    shake.t -= dt;
-    if(shake.t > 0){ shake.x=rnd(-6,6)*(shake.t/0.35); shake.y=rnd(-4,4)*(shake.t/0.35); }
-    else { shake.x=0; shake.y=0; }
-    for(let i=particles.length-1;i>=0;i--){
-      const p=particles[i];
-      p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=180*dt; p.life-=dt;
-      if(p.life<=0) particles.splice(i,1);
-    }
-  }
-  // hue cycles on start/gameover too
-  hue = (hue + 4*dt) % 360;
+  const dt = Math.min((ts-lastT)/1000, 0.05);
+  lastT = ts;
+  if(state==='playing') update(dt);
   draw();
 }
-
-requestAnimationFrame(ts=>{ lastTime=ts; requestAnimationFrame(loop); });
+requestAnimationFrame(ts=>{ lastT=ts; requestAnimationFrame(loop); });
 
 })();
 </script>

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vine Rush - Free HTML5 Game</title>
+  <meta name="description" content="Play Vine Rush - Swipe to dodge multiplying jungle vines and swing through the dense forest.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d1f0d">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Vine Rush - Free HTML5 Game">
+  <meta property="og:description" content="Tap to latch onto vine anchors, swing through gap gates, and survive the jungle corridor!">
+  <meta property="og:url" content="https://balinti.github.io/vine-rush/">
+  <meta property="og:image" content="https://balinti.github.io/vine-rush/preview.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Vine Rush - Free HTML5 Game">
+  <meta name="twitter:description" content="Tap to latch onto vine anchors, swing through gap gates, and survive the jungle corridor!">
+  <meta name="twitter:image" content="https://balinti.github.io/vine-rush/preview.png">
+
+  <!-- AdSense -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4099346100621490" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; min-height: 100vh;
+      background: #0a160a;
+      display: flex; flex-direction: column; align-items: center;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #c8e6c9;
+      overflow-x: hidden;
+    }
+    #game-wrap {
+      position: relative;
+      width: 100%; max-width: 420px;
+      display: flex; justify-content: center;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      max-width: 420px;
+      touch-action: none;
+      cursor: pointer;
+    }
+    #seo-section {
+      width: 100%; max-width: 420px;
+      padding: 18px 16px 32px;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #7ba87d;
+    }
+    #seo-section h2 { font-size: 15px; color: #a5d6a7; margin: 14px 0 6px; }
+    #seo-section h3 { font-size: 13px; color: #81c784; margin: 10px 0 4px; }
+    #seo-section p, #seo-section li { margin-bottom: 4px; }
+    #seo-section ul { padding-left: 18px; }
+    #seo-section details { margin-top: 10px; }
+    #seo-section summary { cursor: pointer; color: #a5d6a7; font-weight: 600; }
+  </style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="c"></canvas>
+</div>
+
+<section id="seo-section" aria-label="How to Play Vine Rush">
+  <h2>How to Play Vine Rush</h2>
+  <p>Auto-run through the jungle corridor. Tap or press <strong>Space</strong> to latch onto a vine anchor and swing through the gap in the thorn wall. Land clean for a <em>Clean Cut</em> bonus!</p>
+
+  <h3>Controls</h3>
+  <ul>
+    <li><strong>Tap / Click</strong> — latch onto vine anchor</li>
+    <li><strong>Space or Enter</strong> — latch (keyboard)</li>
+  </ul>
+
+  <h3>Tips</h3>
+  <ul>
+    <li>Wait for the anchor glow to peak before tapping — perfect timing earns combo points.</li>
+    <li>Gates get narrower as your score climbs. Stay focused!</li>
+    <li>Decoy anchors (red outline) appear after score 50 — avoid them or get a weak swing.</li>
+    <li>Near-misses reward sparks; direct hits end your run.</li>
+  </ul>
+
+  <details>
+    <summary>FAQ</summary>
+    <h3>Is Vine Rush free?</h3>
+    <p>Yes — completely free, no download required. Play directly in your browser.</p>
+    <h3>Does it work on mobile?</h3>
+    <p>Yes — optimized for touch on iOS and Android.</p>
+    <h3>How is the high score saved?</h3>
+    <p>Your best score is stored locally in your browser using localStorage.</p>
+  </details>
+</section>
+
+<script>
+(function(){
+'use strict';
+
+// ── Constants ────────────────────────────────────────────────────
+const LS_KEY = 'vineRushHighScore_v1';
+const SHARE_URL = 'https://balinti.github.io/vine-rush/';
+const W_CSS = 420, H_CSS = 680;
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+// ── Canvas Setup ─────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+canvas.width = W_CSS * DPR;
+canvas.height = H_CSS * DPR;
+canvas.style.height = H_CSS + 'px';
+ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+// ── State ────────────────────────────────────────────────────────
+const STATE = { START: 0, PLAYING: 1, GAMEOVER: 2 };
+let state = STATE.START;
+let score = 0, combo = 0, best = parseInt(localStorage.getItem(LS_KEY) || '0');
+let hue = 120; // cycling green base
+let shake = { x: 0, y: 0, t: 0 };
+let impactFreeze = 0;
+let lastTime = 0;
+let particles = [];
+let bgBands = initBands();
+let gameTime = 0; // seconds in current game
+
+// ── Player ───────────────────────────────────────────────────────
+const PLAYER_R = 14;
+let player = {};
+
+// ── Vine / Swing ─────────────────────────────────────────────────
+let anchor = null;   // { x, y, radius (latch window), decoy }
+let swing = null;    // { ax, ay, len, angle, angVel, t }
+let nextAnchorX = 0;
+const LATCH_WINDOW = 70; // px around anchor.x where tap latches
+const SWING_DURATION = 0.55; // seconds
+
+// ── Gate / Thorn wall ────────────────────────────────────────────
+let gates = [];      // { x, gapY, gapH, passed, scored, color }
+
+// ── Scrolling ────────────────────────────────────────────────────
+let scrollSpeed = 180; // px/s; increases over time
+const SPEED_MAX = 420;
+const SPEED_ACCEL = 4;
+
+// ── Helpers ──────────────────────────────────────────────────────
+function lerp(a,b,t){ return a+(b-a)*t; }
+function clamp(v,lo,hi){ return v<lo?lo:v>hi?hi:v; }
+function rnd(a,b){ return a+Math.random()*(b-a); }
+function rndI(a,b){ return Math.floor(rnd(a,b+1)); }
+
+function initBands(){
+  const b=[];
+  for(let i=0;i<5;i++){
+    b.push({ y: rnd(0,H_CSS), h: rnd(40,120), spd: rnd(20,60), alpha: rnd(0.03,0.09) });
+  }
+  return b;
+}
+
+function getGateGap(){
+  // narrower as game progresses
+  if(score<5)  return 160;
+  if(score<10) return 140;
+  if(score<20) return 120;
+  if(score<35) return 105;
+  if(score<50) return 92;
+  if(score<70) return 82;
+  return Math.max(70, 82 - (score-70)*0.3);
+}
+
+// ── Reset ────────────────────────────────────────────────────────
+function resetGame(){
+  score = 0; combo = 0;
+  hue = 120;
+  shake = {x:0,y:0,t:0};
+  impactFreeze = 0;
+  particles = [];
+  gameTime = 0;
+  scrollSpeed = 180;
+  bgBands = initBands();
+
+  player = {
+    x: W_CSS * 0.22,
+    y: H_CSS * 0.5,
+    vy: 0,
+    vx: 80,
+    onGround: false,
+    dead: false,
+    trail: []
+  };
+
+  gates = [];
+  anchor = null;
+  swing = null;
+
+  // spawn first gate far enough right
+  spawnGate(W_CSS + 180);
+  spawnGate(W_CSS + 180 + gateSpacing());
+  // anchor above upcoming gate
+  spawnAnchor();
+}
+
+function gateSpacing(){
+  return clamp(580 - score * 3, 340, 600);
+}
+
+function spawnGate(x){
+  const gapH = getGateGap();
+  const minY = 80, maxY = H_CSS - 80 - gapH;
+  const gapY = rnd(minY, maxY);
+  const gateHue = hue + (gapH < 90 ? 40 : 0); // shift red for tight gates
+  gates.push({ x, gapY, gapH, passed:false, scored:false, color: `hsl(${gateHue},70%,45%)` });
+}
+
+function spawnAnchor(){
+  if(!gates.length) return;
+  const nextGate = gates.find(g=>!g.passed) || gates[0];
+  const gx = nextGate.x;
+  const ax = clamp(gx - rnd(80,140), player.x+60, W_CSS+40);
+  const ay = nextGate.gapY + nextGate.gapH/2 - rnd(90,150);
+  const isDecoy = score >= 50 && Math.random() < 0.28;
+  anchor = { x: ax, y: clamp(ay, 60, H_CSS*0.45), decoy: isDecoy, glow: 0 };
+  nextAnchorX = ax;
+}
+
+// ── Particles ────────────────────────────────────────────────────
+function spawnParticles(x, y, count, type){
+  for(let i=0;i<count;i++){
+    const angle = Math.random()*Math.PI*2;
+    const spd = type==='death' ? rnd(80,260) : rnd(40,140);
+    const life = type==='death' ? rnd(0.6,1.2) : rnd(0.3,0.7);
+    const h = type==='leaf'  ? rnd(80,140) :
+              type==='spark' ? rnd(40,80)  :
+              type==='death' ? rnd(10,50)  : hue;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle)*spd,
+      vy: Math.sin(angle)*spd,
+      life, maxLife: life,
+      r: type==='leaf' ? rnd(3,7) : rnd(2,5),
+      h, s: 80, l: 65,
+      type
+    });
+  }
+}
+
+// ── Swing physics ────────────────────────────────────────────────
+function startSwing(ax, ay){
+  const dx = player.x - ax, dy = player.y - ay;
+  const len = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx);
+  // angular velocity from current player velocity
+  const angVel = (player.vx * (dy/len) - player.vy * (dx/len)) / len;
+  swing = { ax, ay, len, angle, angVel: angVel || 1.8, t: 0 };
+  anchor = null;
+}
+
+function updateSwing(dt){
+  if(!swing) return;
+  swing.t += dt;
+  // pendulum: α = -(g/L) sin θ
+  const G = 600;
+  swing.angVel += -(G / swing.len) * Math.sin(swing.angle) * dt;
+  swing.angVel *= 0.995; // very mild damping
+  swing.angle += swing.angVel * dt;
+
+  player.x = swing.ax + Math.cos(swing.angle) * swing.len;
+  player.y = swing.ay + Math.sin(swing.angle) * swing.len;
+  player.vx = -Math.sin(swing.angle) * swing.angVel * swing.len;
+  player.vy =  Math.cos(swing.angle) * swing.angVel * swing.len;
+
+  // auto-release: at apex or max duration
+  const atApex = Math.abs(swing.angVel) < 0.3 && swing.t > 0.15;
+  if(atApex || swing.t >= SWING_DURATION){
+    swing = null;
+    // launch outward
+  }
+}
+
+// ── Input ─────────────────────────────────────────────────────────
+function onInput(){
+  if(state === STATE.START){ state = STATE.PLAYING; resetGame(); return; }
+  if(state === STATE.GAMEOVER){ state = STATE.PLAYING; resetGame(); return; }
+  if(state !== STATE.PLAYING) return;
+  if(impactFreeze > 0) return;
+
+  // try to latch
+  if(!swing && anchor){
+    const dx = Math.abs(player.x - anchor.x);
+    if(dx <= LATCH_WINDOW){
+      if(anchor.decoy){
+        // weak swing — penalize
+        combo = 0;
+        spawnParticles(player.x, player.y, 6, 'spark');
+        startSwing(anchor.x, anchor.y);
+        swing.len *= 0.5; // short weak arc
+      } else {
+        startSwing(anchor.x, anchor.y);
+        spawnParticles(anchor.x, anchor.y, 8, 'leaf');
+      }
+    }
+  }
+}
+
+canvas.addEventListener('pointerdown', e=>{ e.preventDefault(); onInput(); });
+document.addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='Enter'){ e.preventDefault(); onInput(); } });
+
+// ── Update ────────────────────────────────────────────────────────
+function update(dt){
+  if(impactFreeze > 0){ impactFreeze -= dt; return; }
+
+  gameTime += dt;
+  scrollSpeed = Math.min(SPEED_MAX, scrollSpeed + SPEED_ACCEL * dt);
+  hue = (hue + 6 * dt) % 360;
+
+  // update bg bands
+  for(const b of bgBands){
+    b.y -= b.spd * dt;
+    if(b.y + b.h < 0) b.y = H_CSS + b.h;
+  }
+
+  // update particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x += p.vx*dt; p.y += p.vy*dt;
+    p.vy += 180*dt; // gravity
+    p.life -= dt;
+    if(p.life<=0) particles.splice(i,1);
+  }
+
+  // update shake
+  if(shake.t > 0){
+    shake.t -= dt;
+    shake.x = rnd(-6,6) * (shake.t/0.35);
+    shake.y = rnd(-4,4) * (shake.t/0.35);
+    if(shake.t<=0){ shake.x=0; shake.y=0; }
+  }
+
+  // scroll gates left
+  for(const g of gates) g.x -= scrollSpeed * dt;
+  if(anchor) anchor.x -= scrollSpeed * dt;
+
+  // update anchor glow
+  if(anchor){
+    const dx = Math.abs(player.x - anchor.x);
+    anchor.glow = clamp(1 - dx/(LATCH_WINDOW*1.4), 0, 1);
+  }
+
+  // player physics (free flight)
+  if(!swing){
+    player.vy += 460 * dt; // gravity
+    player.vx = lerp(player.vx, scrollSpeed * 0.42, dt * 1.2);
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+  } else {
+    updateSwing(dt);
+  }
+
+  // trail
+  player.trail.push({x:player.x, y:player.y, t:0.18});
+  for(let i=player.trail.length-1;i>=0;i--){
+    player.trail[i].t -= dt;
+    if(player.trail[i].t<=0) player.trail.splice(i,1);
+  }
+
+  // spawn new gate / anchor when needed
+  const rightmost = gates.reduce((mx,g)=>Math.max(mx,g.x),0);
+  if(rightmost < W_CSS + 60){
+    spawnGate(rightmost + gateSpacing());
+  }
+  if(!anchor && !swing){
+    spawnAnchor();
+  }
+
+  // remove off-screen gates
+  for(let i=gates.length-1;i>=0;i--){
+    if(gates[i].x < -60) gates.splice(i,1);
+  }
+
+  // score + near-miss detection
+  for(const g of gates){
+    if(!g.passed && g.x + 8 < player.x){
+      g.passed = true;
+      const inGap = player.y >= g.gapY && player.y <= g.gapY + g.gapH;
+      if(inGap){
+        g.scored = true;
+        score++;
+        combo++;
+        // near-miss: within 12px of edge
+        const distTop = player.y - g.gapY;
+        const distBot = (g.gapY + g.gapH) - player.y;
+        if(distTop < 12 || distBot < 12){
+          combo = Math.max(combo, 1);
+          shake.t = 0.12; shake.x=rnd(-3,3); shake.y=rnd(-2,2);
+          spawnParticles(player.x, player.y, 12, 'spark');
+        } else {
+          // perfect / clean
+          spawnParticles(player.x, player.y, 10, 'leaf');
+        }
+        if(combo >= 3) spawnParticles(player.x, player.y, 6, 'spark');
+        if(score > best){ best = score; localStorage.setItem(LS_KEY, best); }
+      } else {
+        // hit wall — die
+        die();
+        return;
+      }
+    }
+  }
+
+  // boundary death
+  if(player.y > H_CSS + 40 || player.y < -60 || player.x < -40){
+    die();
+  }
+}
+
+function die(){
+  if(player.dead) return;
+  player.dead = true;
+  spawnParticles(player.x, player.y, 28, 'death');
+  shake.t = 0.35;
+  impactFreeze = 0.12;
+  if(score > best){ best = score; localStorage.setItem(LS_KEY, best); }
+  setTimeout(()=>{ state = STATE.GAMEOVER; }, 500);
+}
+
+// ── Draw ──────────────────────────────────────────────────────────
+function draw(){
+  ctx.save();
+  ctx.translate(shake.x, shake.y);
+
+  // background gradient
+  const bg = ctx.createLinearGradient(0,0,0,H_CSS);
+  bg.addColorStop(0, '#040c04');
+  bg.addColorStop(1, '#071207');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0,0,W_CSS,H_CSS);
+
+  // parallax bands
+  for(const b of bgBands){
+    ctx.fillStyle = `hsla(${hue},40%,18%,${b.alpha})`;
+    ctx.fillRect(0, b.y, W_CSS, b.h);
+  }
+
+  if(state === STATE.START){
+    drawStartScreen();
+    ctx.restore();
+    return;
+  }
+
+  // gates
+  for(const g of gates){
+    drawGate(g);
+  }
+
+  // vine rope while swinging
+  if(swing){
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(swing.ax, swing.ay);
+    ctx.lineTo(player.x, player.y);
+    ctx.strokeStyle = `hsla(${hue},70%,40%,0.8)`;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // anchor dot
+    ctx.beginPath();
+    ctx.arc(swing.ax, swing.ay, 6, 0, Math.PI*2);
+    ctx.fillStyle = `hsl(${hue},80%,60%)`;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // anchor indicator
+  if(anchor && !swing){
+    drawAnchor(anchor);
+  }
+
+  // trail
+  for(let i=0;i<player.trail.length;i++){
+    const tr = player.trail[i];
+    const alpha = (tr.t/0.18)*0.35;
+    ctx.beginPath();
+    ctx.arc(tr.x, tr.y, PLAYER_R*(tr.t/0.18)*0.7, 0, Math.PI*2);
+    ctx.fillStyle = `hsla(${hue},80%,60%,${alpha})`;
+    ctx.fill();
+  }
+
+  // particles
+  for(const p of particles){
+    const a = p.life/p.maxLife;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r*a, 0, Math.PI*2);
+    ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${a})`;
+    ctx.fill();
+  }
+
+  // player
+  if(!player.dead){
+    // glow
+    const gl = ctx.createRadialGradient(player.x,player.y,0,player.x,player.y,PLAYER_R*2.2);
+    gl.addColorStop(0, `hsla(${hue},90%,70%,0.35)`);
+    gl.addColorStop(1, 'transparent');
+    ctx.fillStyle = gl;
+    ctx.beginPath(); ctx.arc(player.x,player.y,PLAYER_R*2.2,0,Math.PI*2); ctx.fill();
+    // body
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, PLAYER_R, 0, Math.PI*2);
+    ctx.fillStyle = `hsl(${hue},85%,62%)`;
+    ctx.fill();
+    ctx.strokeStyle = `hsl(${hue},60%,80%)`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // HUD
+  drawHUD();
+
+  if(state === STATE.GAMEOVER){
+    drawGameOver();
+  }
+
+  ctx.restore();
+}
+
+function drawGate(g){
+  const W = 22;
+  const gateHue = g.gapH < 90 ? (hue+35)%360 : hue;
+
+  // top wall
+  ctx.save();
+  // thorn gradient
+  const gradT = ctx.createLinearGradient(g.x-W/2,0,g.x+W/2,0);
+  gradT.addColorStop(0, `hsl(${gateHue},65%,25%)`);
+  gradT.addColorStop(0.5, `hsl(${gateHue},75%,38%)`);
+  gradT.addColorStop(1, `hsl(${gateHue},65%,25%)`);
+  ctx.fillStyle = gradT;
+  ctx.fillRect(g.x - W/2, 0, W, g.gapY);
+
+  // bottom wall
+  ctx.fillRect(g.x - W/2, g.gapY + g.gapH, W, H_CSS - (g.gapY + g.gapH));
+
+  // thorns on top wall bottom edge
+  drawThorns(g.x - W/2, g.gapY, W, false, gateHue);
+  // thorns on bottom wall top edge
+  drawThorns(g.x - W/2, g.gapY + g.gapH, W, true, gateHue);
+
+  // gap highlight glow
+  const glGap = ctx.createLinearGradient(0,g.gapY,0,g.gapY+g.gapH);
+  glGap.addColorStop(0, `hsla(${gateHue},90%,70%,0.10)`);
+  glGap.addColorStop(0.5, `hsla(${gateHue},90%,70%,0.04)`);
+  glGap.addColorStop(1, `hsla(${gateHue},90%,70%,0.10)`);
+  ctx.fillStyle = glGap;
+  ctx.fillRect(g.x - W/2, g.gapY, W, g.gapH);
+
+  ctx.restore();
+}
+
+function drawThorns(x, y, w, pointUp, h){
+  const count = 4;
+  const tw = w/count;
+  ctx.beginPath();
+  ctx.fillStyle = `hsl(${h},80%,55%)`;
+  for(let i=0;i<count;i++){
+    const tx = x + i*tw;
+    if(pointUp){
+      ctx.moveTo(tx, y);
+      ctx.lineTo(tx+tw/2, y - 10);
+      ctx.lineTo(tx+tw, y);
+    } else {
+      ctx.moveTo(tx, y);
+      ctx.lineTo(tx+tw/2, y + 10);
+      ctx.lineTo(tx+tw, y);
+    }
+  }
+  ctx.fill();
+}
+
+function drawAnchor(a){
+  const glow = a.glow;
+  const r = 10 + glow*6;
+  const ah = a.decoy ? 0 : hue;
+
+  // pulsing ring
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(a.x, a.y, r, 0, Math.PI*2);
+  if(a.decoy){
+    ctx.strokeStyle = `hsla(0,90%,55%,${0.4+glow*0.5})`;
+  } else {
+    ctx.strokeStyle = `hsla(${ah},85%,65%,${0.4+glow*0.5})`;
+  }
+  ctx.lineWidth = 2 + glow*2;
+  ctx.stroke();
+
+  // inner dot
+  ctx.beginPath();
+  ctx.arc(a.x, a.y, 5, 0, Math.PI*2);
+  ctx.fillStyle = a.decoy ? `hsl(0,80%,55%)` : `hsl(${ah},80%,65%)`;
+  ctx.fill();
+
+  // latch window indicator (subtle arc)
+  if(!a.decoy && glow > 0.3){
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, LATCH_WINDOW, -Math.PI/2, Math.PI/2);
+    ctx.strokeStyle = `hsla(${ah},80%,70%,${glow*0.25})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawHUD(){
+  ctx.save();
+  // score
+  ctx.font = 'bold 28px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = `hsl(${hue},70%,80%)`;
+  ctx.fillText(score, W_CSS/2, 44);
+
+  // best
+  ctx.font = '13px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(180,220,180,0.55)';
+  ctx.fillText('BEST ' + best, W_CSS/2, 62);
+
+  // combo
+  if(combo >= 2){
+    ctx.font = `bold ${14+Math.min(combo,6)*2}px "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = `hsl(${hue},90%,70%)`;
+    ctx.fillText('×' + combo + ' COMBO', W_CSS/2, H_CSS - 28);
+  }
+  ctx.restore();
+}
+
+function drawStartScreen(){
+  // title glow
+  ctx.save();
+  ctx.textAlign = 'center';
+
+  // ambient glow behind title
+  const gl = ctx.createRadialGradient(W_CSS/2, H_CSS*0.38, 0, W_CSS/2, H_CSS*0.38, 130);
+  gl.addColorStop(0, `hsla(${hue},80%,40%,0.3)`);
+  gl.addColorStop(1, 'transparent');
+  ctx.fillStyle = gl;
+  ctx.fillRect(0,0,W_CSS,H_CSS);
+
+  ctx.font = 'bold 52px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = `hsl(${hue},85%,70%)`;
+  ctx.shadowColor = `hsl(${hue},90%,50%)`;
+  ctx.shadowBlur = 22;
+  ctx.fillText('VINE', W_CSS/2, H_CSS*0.35);
+  ctx.fillText('RUSH', W_CSS/2, H_CSS*0.35+58);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '16px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(180,230,180,0.8)';
+  ctx.fillText('Swing through the jungle gates', W_CSS/2, H_CSS*0.55);
+
+  // pulsing tap text
+  const pulse = 0.6 + 0.4*Math.sin(Date.now()*0.004);
+  ctx.globalAlpha = pulse;
+  ctx.font = 'bold 18px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = `hsl(${hue},80%,72%)`;
+  ctx.fillText('TAP TO START', W_CSS/2, H_CSS*0.68);
+  ctx.globalAlpha = 1;
+
+  // hint icons (small leaf decorations)
+  drawLeafDecor();
+
+  ctx.restore();
+}
+
+function drawLeafDecor(){
+  const t = Date.now()*0.001;
+  for(let i=0;i<6;i++){
+    const x = (i%2===0?0.2:0.8)*W_CSS + Math.sin(t+i)*12;
+    const y = 0.2*H_CSS + i*60 + Math.cos(t*0.7+i)*8;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 8, 14, t*0.3+i, 0, Math.PI*2);
+    ctx.fillStyle = `hsla(${(hue+i*20)%360},70%,45%,0.35)`;
+    ctx.fill();
+  }
+}
+
+function drawGameOver(){
+  ctx.save();
+  // dim overlay
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  ctx.fillRect(0,0,W_CSS,H_CSS);
+
+  ctx.textAlign = 'center';
+
+  ctx.font = 'bold 38px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = `hsl(${hue},75%,65%)`;
+  ctx.shadowColor = `hsl(${hue},80%,40%)`;
+  ctx.shadowBlur = 18;
+  ctx.fillText('GAME OVER', W_CSS/2, H_CSS*0.32);
+  ctx.shadowBlur = 0;
+
+  ctx.font = 'bold 54px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(score, W_CSS/2, H_CSS*0.45);
+
+  ctx.font = '16px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(180,230,180,0.7)';
+  ctx.fillText('BEST  ' + best, W_CSS/2, H_CSS*0.52);
+
+  if(combo >= 3){
+    ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = `hsl(${hue},80%,70%)`;
+    ctx.fillText('MAX COMBO ×' + combo, W_CSS/2, H_CSS*0.58);
+  }
+
+  // retry button
+  const bx = W_CSS/2 - 90, by = H_CSS*0.625, bw = 180, bh = 46;
+  ctx.fillStyle = `hsl(${hue},70%,38%)`;
+  roundRect(ctx, bx, by, bw, bh, 12);
+  ctx.fill();
+  ctx.strokeStyle = `hsl(${hue},70%,60%)`;
+  ctx.lineWidth = 2;
+  roundRect(ctx, bx, by, bw, bh, 12);
+  ctx.stroke();
+
+  ctx.font = 'bold 17px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('TAP TO RETRY', W_CSS/2, by + bh*0.63);
+
+  // share button
+  const sx = W_CSS/2 - 75, sy = H_CSS*0.625 + 58, sw = 150, sh = 38;
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  roundRect(ctx, sx, sy, sw, sh, 10);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, sx, sy, sw, sh, 10);
+  ctx.stroke();
+  ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(200,240,200,0.85)';
+  ctx.fillText('📤 Share Score', W_CSS/2, sy + sh*0.63);
+
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+}
+
+// ── Share ─────────────────────────────────────────────────────────
+canvas.addEventListener('pointerdown', e=>{
+  if(state !== STATE.GAMEOVER) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W_CSS / rect.width;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * (H_CSS / rect.height);
+  // share button area
+  const sx = W_CSS/2-75, sy = H_CSS*0.625+58, sw=150, sh=38;
+  if(mx>=sx && mx<=sx+sw && my>=sy && my<=sy+sh){
+    e.stopImmediatePropagation();
+    doShare();
+  }
+},{capture:true});
+
+function doShare(){
+  const msg = `🌿 Vine Rush — I scored ${score}! Can you beat me? Play free: ${SHARE_URL}`;
+  if(navigator.share){
+    navigator.share({ title:'Vine Rush', text:msg, url:SHARE_URL }).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(msg).then(()=>{
+      showToast('Copied to clipboard!');
+    }).catch(()=>{
+      showToast(msg);
+    });
+  }
+}
+
+// simple toast
+let toastTimer=null;
+function showToast(msg){
+  let el = document.getElementById('vr-toast');
+  if(!el){
+    el = document.createElement('div');
+    el.id='vr-toast';
+    el.style.cssText='position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#a5d6a7;padding:10px 18px;border-radius:20px;font-size:13px;z-index:999;pointer-events:none;transition:opacity 0.3s';
+    document.body.appendChild(el);
+  }
+  el.textContent=msg; el.style.opacity='1';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.style.opacity='0',2400);
+}
+
+// ── Main Loop ─────────────────────────────────────────────────────
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt = Math.min((ts - lastTime)/1000, 0.05);
+  lastTime = ts;
+  if(state === STATE.PLAYING && !player.dead){
+    update(dt);
+  } else if(state === STATE.PLAYING && player.dead){
+    // update particles/shake during death anim
+    shake.t -= dt;
+    if(shake.t > 0){ shake.x=rnd(-6,6)*(shake.t/0.35); shake.y=rnd(-4,4)*(shake.t/0.35); }
+    else { shake.x=0; shake.y=0; }
+    for(let i=particles.length-1;i>=0;i--){
+      const p=particles[i];
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=180*dt; p.life-=dt;
+      if(p.life<=0) particles.splice(i,1);
+    }
+  }
+  // hue cycles on start/gameover too
+  hue = (hue + 4*dt) % 360;
+  draw();
+}
+
+requestAnimationFrame(ts=>{ lastTime=ts; requestAnimationFrame(loop); });
+
+})();
+</script>
+</body>
+</html>

@@ -3,25 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <title>Vine Rush - Free HTML5 Game</title>
-  <meta name="description" content="Play Vine Rush - Swipe to grow your snake vine collecting leaves before time runs out.">
+  <meta name="description" content="Play Vine Rush - Swipe to snatch glowing fruits as vines scroll past, chaining combos to multiply your score.">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1a2a0a">
-  <!-- Open Graph -->
+  <meta name="theme-color" content="#0d1f0a">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Vine Rush - Free HTML5 Game">
-  <meta property="og:description" content="Play Vine Rush - Swipe to grow your snake vine collecting leaves before time runs out.">
+  <meta property="og:description" content="Grab anchor points at the perfect moment to chain combos. Avoid thorns. Survive the rush.">
   <meta property="og:url" content="https://balinti.github.io/vine-rush/">
   <meta property="og:image" content="https://balinti.github.io/vine-rush/og-image.png">
-  <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Vine Rush - Free HTML5 Game">
-  <meta name="twitter:description" content="Play Vine Rush - Swipe to grow your snake vine collecting leaves before time runs out.">
+  <meta name="twitter:description" content="Grab anchor points at the perfect moment to chain combos. Avoid thorns. Survive the rush.">
   <meta name="twitter:image" content="https://balinti.github.io/vine-rush/og-image.png">
   <link rel="canonical" href="https://balinti.github.io/vine-rush/">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4099346100621490" crossorigin="anonymous"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:100%;height:100%;background:#0a1a04;display:flex;justify-content:center;align-items:center;overflow:hidden;font-family:'Segoe UI',sans-serif}
+    html,body{width:100%;height:100%;background:#060f04;display:flex;justify-content:center;align-items:center;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
     #wrap{position:relative;width:420px;max-width:100vw;height:750px;max-height:100vh}
     canvas{display:block;width:100%;height:100%;touch-action:none}
   </style>
@@ -29,581 +27,978 @@
 <body>
 <div id="wrap"><canvas id="c"></canvas></div>
 <script>
-(function(){
-'use strict';
+(function(){'use strict';
 
-// ── Canvas setup ─────────────────────────────────────────────────────────────
-const wrap = document.getElementById('wrap');
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-const DPR = Math.min(window.devicePixelRatio||1, 2);
-let CW = 420, CH = 750;
-
+// ── Canvas ────────────────────────────────────────────────────────────────────
+const wrap=document.getElementById('wrap');
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const DPR=Math.min(window.devicePixelRatio||1,2);
+let CW=420,CH=750;
 function resize(){
-  const r = wrap.getBoundingClientRect();
-  CW = r.width; CH = r.height;
-  canvas.width = CW * DPR; canvas.height = CH * DPR;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const r=wrap.getBoundingClientRect();
+  CW=r.width;CH=r.height;
+  canvas.width=CW*DPR;canvas.height=CH*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
 }
 resize();
-window.addEventListener('resize', resize);
+window.addEventListener('resize',resize);
 
-// ── Constants ────────────────────────────────────────────────────────────────
-const GRAVITY      = 900;
-const SNAP_RADIUS  = 160;
-const PLAYER_R     = 12;
-const LEAF_R       = 10;
-const THORN_R      = 9;
-const SPIDER_R     = 11;
-const NODE_R       = 9;
-const SCROLL_BASE  = 120;
-const LS_KEY       = 'vineRushHighScore';
+// ── PRNG (mulberry32) ─────────────────────────────────────────────────────────
+const params=new URLSearchParams(location.search);
+let seedVal=parseInt(params.get('seed')||localStorage.getItem('vineRushSeed')||Date.now())>>>0;
+function mulberry32(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rng=mulberry32(seedVal);
 
-// ── Game state ───────────────────────────────────────────────────────────────
-let state = 'start'; // 'start' | 'playing' | 'gameover'
-let score, combo, bestScore = parseInt(localStorage.getItem(LS_KEY)||'0', 10);
-let elapsed, phase, cameraX, distance;
-let shakeAmt = 0, shakeX = 0, shakeY = 0;
-let redFlash = 0, hue = 110;
+// ── Challenge banner ──────────────────────────────────────────────────────────
+const challengeScore=parseInt(params.get('challenge')||'0');
 
-// player
-let px, py, pvx, pvy;
-let anchored = false, anchorNode = null;
-let swingAngle = 0, swingAngVel = 0, ropeLen = 0;
+// ── Storage ───────────────────────────────────────────────────────────────────
+const LS_BEST='vineRushBest';
+const LS_SEED='vineRushSeed';
+let bestScore=parseInt(localStorage.getItem(LS_BEST)||'0');
 
-// world
-let nodes, leaves, thorns, walls, spiders;
-let particles, popTexts, speedLines;
-let closeCalls, idCtr;
+// ── Constants ─────────────────────────────────────────────────────────────────
+const ROPE_BASE=160;
+const GRAVITY=700;
+const LIVES=3;
+// latch window durations (seconds) by difficulty band
+const WINDOW_DUR=[2.2,1.8,1.5,1.2,0.9,0.65];
+// ring outer radius starts here, shrinks to GOLD_R
+const RING_START_R=52;
+const GOLD_R=14;
+// how long before window closes that anchor type is revealed (seconds)
+const REVEAL_DELAY=[0.5,0.45,0.35,0.25,0.18,0.12];
 
-function mult(){ return 1 + Math.min(4, Math.floor(combo / 5)); }
+// ── State ─────────────────────────────────────────────────────────────────────
+let state='start'; // 'start'|'playing'|'gameover'
+let score=0,combo=0,streak=0,peakCombo=0;
+let lives=LIVES;
+let timeScale=1;
+let tsTimer=0;
+let bgHue=100;
+let ambientT=0;
+let gameOverTimer=0;
+let retryLocked=true;
+let retryRingProg=0;
+let shakeX=0,shakeY=0,shakeAmt=0,shakeFrames=0;
+let flashAlpha=0,flashColor='#ffffff';
+let desatAlpha=0;
+let rushCount=0; // swings remaining at rush speed
+let pendulumPeriodMult=1;
+let diffBand=0; // 0–5
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// pendulum state
+let anchorX=0,anchorY=0; // world coords of current/last anchor
+let angle=0,angVel=0;
+let ropeLen=ROPE_BASE;
+let swingCount=0;
+
+// player visual
+let pSquish=1,pStretch=1; // for squish/stretch
+
+// anchors queue
+let anchors=[];     // upcoming anchor objects
+let activeAnchor=null; // the one currently in latch window
+let nextAnchorDist=0;  // horizontal distance to next anchor
+
+// particles + floats
+let particles=[];
+let floatTexts=[];
+let leafSil=[];  // background leaf silhouettes
+
+// ── Difficulty ────────────────────────────────────────────────────────────────
+function getDiffBand(){
+  if(score>=200)return 5;
+  if(score>=130)return 4;
+  if(score>=80) return 3;
+  if(score>=40) return 2;
+  if(score>=15) return 1;
+  return 0;
+}
+function isDualAnchor(){return score>=80;}
+function hasThorn(){return score>=15;}
+function hasRush(){return score>=40;}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 function initGame(){
-  score = 0; combo = 0; elapsed = 0; phase = 0;
-  cameraX = 0; distance = 0;
-  shakeAmt = 0; shakeX = 0; shakeY = 0; redFlash = 0; hue = 110;
-  anchored = false; anchorNode = null;
-  nodes=[]; leaves=[]; thorns=[]; walls=[]; spiders=[];
-  particles=[]; popTexts=[]; speedLines=[];
-  closeCalls={}; idCtr=0;
-  px = CW * 0.28; py = CH * 0.4;
-  pvx = 80; pvy = 0;
-  for(let i=0;i<8;i++) spawnChunk(i * 180, false);
+  seedVal=(Date.now())>>>0;
+  localStorage.setItem(LS_SEED,seedVal);
+  rng=mulberry32(seedVal);
+  score=0;combo=0;streak=0;peakCombo=0;
+  lives=LIVES;
+  timeScale=1;tsTimer=0;
+  bgHue=100;ambientT=0;
+  shakeX=0;shakeY=0;shakeAmt=0;shakeFrames=0;
+  flashAlpha=0;desatAlpha=0;
+  rushCount=0;pendulumPeriodMult=1;
+  diffBand=0;
+  swingCount=0;
+  pSquish=1;pStretch=1;
+  particles=[];floatTexts=[];
+  gameOverTimer=0;retryLocked=true;retryRingProg=0;
+
+  // start anchor at center-top area
+  anchorX=CW*0.5;anchorY=CH*0.22;
+  angle=-Math.PI*0.45;
+  ropeLen=ROPE_BASE;
+  angVel=2.2; // start with some swing
+
+  anchors=[];
+  activeAnchor=null;
+  spawnLeafSilhouettes();
+  // pre-populate upcoming anchors
+  for(let i=0;i<4;i++) queueAnchor();
 }
 
-// ── Spawning ─────────────────────────────────────────────────────────────────
-function spawnChunk(baseX, withHaz){
-  const count = 2 + Math.floor(Math.random()*2);
-  for(let i=0;i<count;i++){
-    const nx = baseX + 80 + Math.random()*120;
-    const ny = 110 + Math.random()*(CH - 220);
-    const dead = phase >= 4 && Math.random() < 0.1;
-    nodes.push({ x:nx, y:ny, r:NODE_R, dead, id:idCtr++, w:Math.random()*Math.PI*2 });
-    if(!dead && Math.random()<0.72){
-      const gold = phase >= 3 && Math.random() < 0.28;
-      const ang = -Math.PI*0.5 + (Math.random()-0.5)*Math.PI;
-      const d2 = 42 + Math.random()*50;
-      leaves.push({ x:nx+Math.cos(ang)*d2, y:ny+Math.sin(ang)*d2,
-        r:LEAF_R, gold, id:idCtr++, alive:true, bob:Math.random()*Math.PI*2 });
+// ── Anchor queue ──────────────────────────────────────────────────────────────
+function anchorType(){
+  const r=rng();
+  if(hasThorn()&&r<0.22) return 'THORN';
+  if(hasRush()&&r<0.38) return 'RUSH';
+  return 'GOLD';
+}
+function anchorType2(avoid){
+  let t;
+  do{ t=anchorType(); }while(t===avoid&&rng()>0.3);
+  return t;
+}
+
+function queueAnchor(){
+  const band=getDiffBand();
+  const winDur=WINDOW_DUR[band]*(0.85+rng()*0.3);
+  const revDelay=REVEAL_DELAY[band];
+  // position: to the right of last anchor, varying Y
+  const lastA=anchors.length?anchors[anchors.length-1]:null;
+  const baseX=(lastA?lastA.x:anchorX)+200+rng()*160;
+  const baseY=CH*0.15+rng()*(CH*0.6);
+  const a={
+    x:baseX,y:baseY,
+    type:anchorType(),
+    winDur,revDelay,
+    timer:0,         // counts up once in window
+    active:false,    // window open
+    revealed:false,
+    grabbed:false,
+    missed:false,
+    ringR:RING_START_R,
+    // dual anchor companion
+    dual:null
+  };
+  if(isDualAnchor()&&rng()<0.35){
+    a.dual={
+      x:baseX+60+rng()*80,y:CH*0.2+rng()*(CH*0.55),
+      type:anchorType2(a.type),
+      winDur:winDur*0.85,revDelay,
+      timer:0,active:false,revealed:false,grabbed:false,missed:false,ringR:RING_START_R
+    };
+  }
+  anchors.push(a);
+}
+
+// ── Leaf silhouettes ──────────────────────────────────────────────────────────
+function spawnLeafSilhouettes(){
+  leafSil=[];
+  for(let i=0;i<18;i++){
+    leafSil.push({
+      x:rng()*CW,y:rng()*CH,
+      w:30+rng()*60,h:14+rng()*28,
+      rot:rng()*Math.PI,
+      layer:rng()<0.5?0:1, // 0=far,1=near
+      spd:0.3+rng()*0.4
+    });
+  }
+}
+
+// ── Player screen position ────────────────────────────────────────────────────
+function playerPos(){
+  // world anchor -> screen. We keep anchor scrolling left.
+  // screenAnchorX drifts leftward over time; player always at some screen pos.
+  const sax=screenAnchorX();
+  const say=anchorY;
+  const px=sax+Math.sin(angle)*ropeLen;
+  const py=say-Math.cos(angle)*ropeLen;
+  return{px,py,sax,say};
+}
+
+// The anchor scrolls: we map world X to screen X
+// World origin moves: screen = worldX - cameraX
+// cameraX advances so anchorX stays roughly at CW*0.3
+let cameraX=0;
+function screenAnchorX(){return anchorX-cameraX;}
+function worldToScreen(wx){return wx-cameraX;}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+let lastTs=0;
+function update(dt){
+  dt*=timeScale;
+  ambientT+=dt;
+  bgHue=100+Math.sin(ambientT*0.08)*20;
+
+  diffBand=getDiffBand();
+
+  // slow-motion decay
+  if(tsTimer>0){
+    tsTimer-=dt/timeScale;
+    if(tsTimer<=0){timeScale=1;tsTimer=0;}
+  }
+
+  // screen shake decay
+  if(shakeFrames>0){
+    shakeFrames--;
+    const decay=shakeFrames/6;
+    shakeX=(Math.random()-0.5)*shakeAmt*decay*2;
+    shakeY=(Math.random()-0.5)*shakeAmt*decay*2;
+  } else {shakeX=0;shakeY=0;}
+
+  // flash decay
+  if(flashAlpha>0) flashAlpha=Math.max(0,flashAlpha-dt*8);
+  if(desatAlpha>0) desatAlpha=Math.max(0,desatAlpha-dt*3.5);
+
+  // pendulum physics
+  const period=pendulumPeriodMult*(rushCount>0?0.72:1.0);
+  const g=GRAVITY*period;
+  angVel+=(-g/ropeLen*Math.sin(angle))*dt;
+  angVel*=0.9998;
+  angle+=angVel*dt;
+
+  // rope slowly extends then resets
+  ropeLen=Math.min(ropeLen+10*dt,ROPE_BASE*1.3);
+
+  // detect apex (sign change of angVel) for visual pulse
+  // squish at apex, stretch at grab
+  const apexFactor=Math.abs(angle)/1.2;
+  pStretch=1+apexFactor*0.15;
+  pSquish=1-apexFactor*0.08;
+
+  // camera: keep anchor near left third
+  const targetCamX=anchorX-CW*0.32;
+  cameraX+=(targetCamX-cameraX)*Math.min(1,dt*3);
+
+  // advance anchor timers
+  activateAnchorsInRange();
+  updateAnchorTimers(dt);
+
+  // check if activeAnchor window closed without grab -> miss
+  checkMisses();
+
+  // particles
+  updateParticles(dt);
+  updateFloatTexts(dt);
+
+  // rush count
+  if(rushCount>0 && Math.abs(angVel)<0.05){
+    // count completed swings roughly
+  }
+
+  // score ticks up passively
+  score+=dt*0.8*(1+combo*0.1);
+
+  // leaf silhouette drift
+  for(const l of leafSil){
+    l.x-=l.spd*(l.layer===0?18:28)*dt;
+    if(l.x<-80) l.x=CW+60;
+  }
+
+  // game over unlock
+  if(state==='gameover'){
+    gameOverTimer+=dt/timeScale;
+    if(gameOverTimer>=1.5){
+      retryLocked=false;
+      retryRingProg=Math.min(1,(gameOverTimer-1.5)/0.5);
     }
   }
-  if(!withHaz) return;
-  if(phase>=1 && Math.random()<0.5+phase*0.06){
-    thorns.push({ x:baseX+90+Math.random()*110, y:80+Math.random()*(CH-160),
-      r:THORN_R, id:idCtr++ });
+}
+
+function activateAnchorsInRange(){
+  if(activeAnchor) return; // one at a time
+  for(const a of anchors){
+    if(a.grabbed||a.missed||a.active) continue;
+    const sx=worldToScreen(a.x);
+    // activate when it enters the right side of screen
+    if(sx<CW*0.85 && sx>-60){
+      a.active=true;
+      activeAnchor=a;
+      // also activate dual
+      if(a.dual) a.dual.active=true;
+      break;
+    }
   }
-  if(phase>=2 && Math.random()<0.42){
-    const wh = 60 + Math.random()*80;
-    walls.push({ x:baseX+60+Math.random()*80, y:100+Math.random()*(CH-wh-200),
-      w:18, h:wh, id:idCtr++ });
+}
+
+function updateAnchorTimers(dt){
+  for(const a of anchors){
+    if(!a.active||a.grabbed||a.missed) continue;
+    a.timer+=dt;
+    // reveal?
+    if(!a.revealed && a.timer>=a.winDur-a.revDelay) a.revealed=true;
+    if(a.dual){
+      a.dual.timer+=dt;
+      if(!a.dual.revealed && a.dual.timer>=a.dual.winDur-a.dual.revDelay) a.dual.revealed=true;
+    }
+    // ring shrinks
+    const prog=Math.min(1,a.timer/a.winDur);
+    a.ringR=RING_START_R-(RING_START_R-GOLD_R)*prog;
+    if(a.dual){
+      const p2=Math.min(1,a.dual.timer/a.dual.winDur);
+      a.dual.ringR=RING_START_R-(RING_START_R-GOLD_R)*p2;
+    }
   }
-  if(phase>=4 && Math.random()<0.38){
-    spiders.push({ x:baseX+100+Math.random()*80, y:100+Math.random()*(CH-200),
-      r:SPIDER_R, id:idCtr++,
-      vx:-(22+Math.random()*32), vy:(Math.random()-0.5)*44,
-      bo:Math.random()*Math.PI*2 });
+}
+
+function checkMisses(){
+  if(!activeAnchor) return;
+  const a=activeAnchor;
+  // window expired
+  if(a.timer>=a.winDur && !a.grabbed){
+    a.missed=true;
+    activeAnchor=null;
+    onMiss(a);
+    queueAnchor();
   }
 }
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 function onInput(){
-  if(state==='start'){ state='playing'; initGame(); return; }
-  if(state==='gameover'){ state='playing'; initGame(); return; }
-  if(state==='playing') toggleAnchor();
+  if(state==='start'){state='playing';initGame();return;}
+  if(state==='gameover'){
+    if(!retryLocked){state='playing';initGame();}
+    return;
+  }
+  if(state==='playing') doGrab();
 }
-canvas.addEventListener('pointerdown', onInput);
-document.addEventListener('keydown', e=>{
-  if(e.code==='Space'||e.code==='Enter'){ e.preventDefault(); onInput(); }
+canvas.addEventListener('pointerdown',onInput);
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'||e.code==='Enter'){e.preventDefault();onInput();}
 });
 
-// ── Anchor ────────────────────────────────────────────────────────────────────
-function toggleAnchor(){
-  if(anchored){
-    anchored = false; anchorNode = null;
-    pvx += 60;
-    if(Math.sqrt(pvx*pvx+pvy*pvy)>200) for(let i=0;i<6;i++) emitSpeedLine();
-    burst(px, py, '#aaffaa', 6, 80);
+// ── Grab ──────────────────────────────────────────────────────────────────────
+function doGrab(){
+  if(!activeAnchor) return;
+  const a=activeAnchor;
+
+  // determine quality: perfect = ring is near gold core
+  const prog=Math.min(1,a.timer/a.winDur);
+  const isPerfect=prog>0.72; // grabbed in tight zone
+
+  // pick which anchor was grabbed (player closer to)
+  let grabbed=a;
+  if(a.dual&&!a.dual.missed){
+    const {px,py}=playerPos();
+    const d1=dist2(px,py,worldToScreen(a.x),a.y);
+    const d2=dist2(px,py,worldToScreen(a.dual.x),a.dual.y);
+    if(d2<d1) grabbed=a.dual;
+  }
+
+  grabbed.grabbed=true;
+  a.grabbed=true; // close whole group
+  activeAnchor=null;
+
+  const type=grabbed.type;
+  const gx=worldToScreen(grabbed.x);
+  const gy=grabbed.y;
+
+  if(type==='THORN'){
+    onThornGrab(gx,gy);
   } else {
-    const snapR = Math.max(75, SNAP_RADIUS - phase*9);
-    let best=null, bestD=snapR;
-    for(const n of nodes){
-      if(n.dead) continue;
-      const dx=n.x-cameraX-px, dy=n.y-py;
-      const d=Math.sqrt(dx*dx+dy*dy);
-      if(d<bestD){ bestD=d; best=n; }
-    }
-    if(best){
-      anchored=true; anchorNode=best;
-      const dx=best.x-cameraX-px, dy=best.y-py;
-      ropeLen=Math.sqrt(dx*dx+dy*dy);
-      swingAngle=Math.atan2(py-best.y, px-(best.x-cameraX));
-      swingAngVel=(pvx*Math.cos(swingAngle+Math.PI*0.5)+pvy*Math.sin(swingAngle+Math.PI*0.5))/Math.max(ropeLen,20);
-      shake(2);
-      burst(px, py, '#ffffaa', 8, 90);
+    // transition anchor
+    const {px,py}=playerPos();
+    // new pendulum from grabbed anchor
+    const dx=px-gx, dy=py-gy;
+    const newLen=Math.sqrt(dx*dx+dy*dy)||ROPE_BASE;
+    const newAngle=Math.atan2(px-gx,gy-py);
+    // transfer angular momentum
+    const spd=Math.sqrt((angVel*ropeLen*Math.cos(angle))**2+(angVel*ropeLen*Math.sin(angle))**2);
+    const newAngVel=spd/newLen*(angVel>0?1:-1);
+
+    anchorX=grabbed.x;
+    anchorY=grabbed.y;
+    angle=newAngle;
+    angVel=newAngVel+( rng()-0.5)*0.3;
+    ropeLen=newLen;
+    swingCount++;
+
+    if(type==='RUSH'){
+      onRushGrab(gx,gy,isPerfect);
+    } else {
+      onGoldGrab(gx,gy,isPerfect,prog);
     }
   }
+  queueAnchor();
 }
 
-// ── Update ────────────────────────────────────────────────────────────────────
-function update(dt){
-  elapsed += dt;
-  phase = elapsed>45?4 : elapsed>25?3 : elapsed>10?2 : elapsed>5?1 : 0;
+function dist2(x1,y1,x2,y2){return (x1-x2)**2+(y1-y2)**2;}
 
-  const scrollSpeed = SCROLL_BASE + phase*22 + elapsed*0.9;
-  cameraX += scrollSpeed * dt;
-  distance += scrollSpeed * dt;
-  score += scrollSpeed * dt * 0.005 * mult();
+// ── GOLD grab ─────────────────────────────────────────────────────────────────
+function onGoldGrab(gx,gy,isPerfect,prog){
+  combo++;streak++;
+  if(streak>peakCombo) peakCombo=streak;
+  const m=comboMult();
+  let pts=(isPerfect?5:2)*m;
+  score+=pts;
 
-  // spawn ahead
-  const maxX = nodes.reduce((m,n)=>Math.max(m,n.x), cameraX);
-  if(maxX < cameraX + CW + 420) spawnChunk(maxX + 40, elapsed > 5);
-
-  // cull
-  const cx = cameraX - 250;
-  nodes   = nodes.filter(n=>n.x>cx);
-  leaves  = leaves.filter(l=>l.alive && l.x>cx);
-  thorns  = thorns.filter(t=>t.x>cx);
-  walls   = walls.filter(w=>w.x>cx);
-  spiders = spiders.filter(s=>s.x>cx);
-
-  // spiders
-  for(const s of spiders){
-    s.x += s.vx*dt;
-    s.y += s.vy*dt + Math.sin(elapsed*2+s.bo)*0.4;
-    if(s.y<50||s.y>CH-50) s.vy*=-1;
-  }
-
-  // player physics
-  if(anchored && anchorNode){
-    const ax = anchorNode.x - cameraX;
-    const ay = anchorNode.y;
-    swingAngVel += (-GRAVITY/Math.max(ropeLen,20)*Math.sin(swingAngle))*dt;
-    swingAngVel *= 0.998;
-    swingAngle += swingAngVel * dt;
-    ropeLen = Math.min(ropeLen + 18*dt, 230);
-    px = ax + Math.sin(swingAngle)*ropeLen;
-    py = ay - Math.cos(swingAngle)*ropeLen;
-    pvx = swingAngVel*ropeLen*Math.cos(swingAngle);
-    pvy = swingAngVel*ropeLen*Math.sin(swingAngle);
+  if(isPerfect){
+    // 24 radial gold particles
+    burstRadial(gx,gy,24,'#ffd700','#ffffff',130);
+    triggerFlash('#ffd72044',2);
+    shake(3,5);
+    floatPush(gx,gy,`PERFECT ×${streak}`,'#ffd700',1.6);
   } else {
-    pvy += GRAVITY * dt;
-    px  += pvx * dt;
-    py  += pvy * dt;
-    pvx += 28 * dt;
-    pvy *= 0.9995;
+    burstRadial(gx,gy,10,'#88ff44','#aaffaa',80);
+    floatPush(gx,gy,`+${pts}`,'#aaffaa',1.2);
   }
+  // vine color cycles with streak
+  bgHue=80+streak*8;
+}
 
-  // camera follow
-  const target = CW * 0.28;
-  const off = px - target;
-  if(off > 0){ cameraX += off*dt*3; px -= off*dt*3; }
+// ── RUSH grab ─────────────────────────────────────────────────────────────────
+function onRushGrab(gx,gy,isPerfect){
+  combo++;streak++;
+  if(streak>peakCombo) peakCombo=streak;
+  rushCount=5;
+  pendulumPeriodMult=Math.max(0.55,pendulumPeriodMult-0.12);
+  angVel*=1.35;
+  burstRadial(gx,gy,14,'#ff8800','#ffdd00',110);
+  triggerFlash('#ff440022',2);
+  floatPush(gx,gy,'RUSH! ×5','#ff8800',1.4);
+  shake(4,4);
+}
 
-  // boundary
-  if(py<-30||py>CH+80||px<-60){ triggerDeath(); return; }
+// ── THORN grab ────────────────────────────────────────────────────────────────
+function onThornGrab(gx,gy){
+  combo=0;streak=0;
+  lives--;
+  shake(8,6);
+  triggerFlash('#ff000055',3);
+  desatAlpha=0.4;
+  burstRadial(gx,gy,12,'#ff3300','#cc0000',90);
+  floatPush(gx,gy,'THORN!','#ff4422',1.5);
+  // pendulum resets to neutral
+  angVel=1.8*(rng()>0.5?1:-1);
+  angle=0;
+  if(lives<=0) triggerDeath(gx,gy,'Caught a thorn');
+}
 
-  // leaves
-  for(let i=leaves.length-1;i>=0;i--){
-    const l=leaves[i];
-    const lx=l.x-cameraX;
-    const dx=lx-px, dy=l.y-py;
-    if(dx*dx+dy*dy<(PLAYER_R+l.r)*(PLAYER_R+l.r)){
-      leaves.splice(i,1);
-      combo++;
-      const m=mult(), pts=(l.gold?5:1)*m;
-      score+=pts;
-      burst(px,py,l.gold?'#ffd700':'#88ff44',l.gold?12:6,100);
-      addPop(px,py,'+'+(l.gold?5:1)+(m>1?' x'+m:''),l.gold?'#ffd700':'#aaffaa');
-    }
-  }
-
-  // thorns
-  for(const t of thorns){
-    const tx=t.x-cameraX, dx=tx-px, dy=t.y-py;
-    const d=Math.sqrt(dx*dx+dy*dy);
-    if(d<PLAYER_R+t.r-2){ triggerDeath(); return; }
-    if(d<PLAYER_R+t.r+20 && !closeCalls[t.id]){
-      closeCalls[t.id]=1; const pts=2*mult(); score+=pts;
-      addPop(px,py,'CLOSE! +'+pts,'#ff9900');
-    }
-  }
-  // walls
-  for(const w of walls){
-    const wx=w.x-cameraX;
-    const nx2=Math.max(wx,Math.min(px,wx+w.w)), ny2=Math.max(w.y,Math.min(py,w.y+w.h));
-    const dx=px-nx2, dy=py-ny2, d=Math.sqrt(dx*dx+dy*dy);
-    if(d<PLAYER_R-2){ triggerDeath(); return; }
-    if(d<PLAYER_R+14 && !closeCalls[w.id]){
-      closeCalls[w.id]=1; const pts=2*mult(); score+=pts;
-      addPop(px,py,'CLOSE! +'+pts,'#ff9900');
-    }
-  }
-  // spiders
-  for(const s of spiders){
-    const sx=s.x-cameraX, dx=sx-px, dy=s.y-py;
-    const d=Math.sqrt(dx*dx+dy*dy);
-    if(d<PLAYER_R+s.r-2){ triggerDeath(); return; }
-    if(d<PLAYER_R+s.r+18 && !closeCalls[s.id]){
-      closeCalls[s.id]=1; const pts=2*mult(); score+=pts;
-      addPop(px,py,'CLOSE! +'+pts,'#ff9900');
-    }
-  }
-
-  // particles
-  for(let i=particles.length-1;i>=0;i--){
-    const p=particles[i];
-    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=260*dt;
-    p.life-=dt; if(p.life<=0){ particles.splice(i,1); continue; }
-    p.alpha=p.life/p.max;
-  }
-  // pop texts
-  for(let i=popTexts.length-1;i>=0;i--){
-    const t=popTexts[i];
-    t.y-=48*dt; t.life-=dt;
-    if(t.life<=0){ popTexts.splice(i,1); continue; }
-    t.alpha=t.life/t.max;
-    t.sc=1+0.5*(1-t.life/t.max);
-  }
-  // speed lines
-  for(let i=speedLines.length-1;i>=0;i--){
-    const l=speedLines[i]; l.x-=620*dt; l.life-=dt;
-    if(l.life<=0) speedLines.splice(i,1);
-  }
-
-  // shake
-  if(shakeAmt>0){
-    shakeAmt=Math.max(0,shakeAmt-dt*6);
-    shakeX=(Math.random()-0.5)*shakeAmt*2.5;
-    shakeY=(Math.random()-0.5)*shakeAmt*2.5;
-  } else { shakeX=0; shakeY=0; }
-
-  if(redFlash>0) redFlash=Math.max(0,redFlash-dt*3);
-  hue = 110 + (mult()-1)*22 + elapsed*1.6;
+// ── Miss ──────────────────────────────────────────────────────────────────────
+function onMiss(a){
+  lives--;
+  streak=0;combo=Math.max(0,combo-1);
+  shake(4,5);
+  timeScale=0.3;tsTimer=0.4; // near-miss slow-mo
+  const gx=worldToScreen(a.x);
+  burstRadial(gx,a.y,8,'#ffffff','#aaaaaa',60);
+  floatPush(gx,a.y,'MISS!','#ff6666',1.3);
+  if(lives<=0) triggerDeath(gx,a.y,'Missed the branch');
 }
 
 // ── Death ─────────────────────────────────────────────────────────────────────
-function triggerDeath(){
-  state='gameover'; anchored=false;
+function triggerDeath(gx,gy,reason){
+  state='gameover';
   const fs=Math.floor(score);
-  if(fs>bestScore){ bestScore=fs; localStorage.setItem(LS_KEY,fs); }
-  shake(14); redFlash=1;
-  for(let i=0;i<32;i++) deathParticle(px,py);
+  if(fs>bestScore){bestScore=fs;localStorage.setItem(LS_BEST,fs);}
+  shake(10,8);
+  triggerFlash('#ff000088',4);
+  burstRadial(gx||CW/2,gy||CH/2,32,'#ff4400','#ffaa00',160);
+  gameOverTimer=0;retryLocked=true;retryRingProg=0;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function shake(a){ shakeAmt=Math.max(shakeAmt,a); }
+function comboMult(){return 1+Math.min(5,Math.floor(streak/3));}
 
-function burst(x,y,color,n,sp){
+function shake(amt,frames){
+  shakeAmt=Math.max(shakeAmt,amt);
+  shakeFrames=Math.max(shakeFrames,frames);
+}
+
+function triggerFlash(color,frames){
+  flashColor=color;
+  flashAlpha=1;
+}
+
+function burstRadial(x,y,n,c1,c2,spd){
   for(let i=0;i<n;i++){
-    const a=Math.random()*Math.PI*2, s=sp*0.6+Math.random()*sp;
+    const a=(i/n)*Math.PI*2+rng()*0.3;
+    const s=spd*(0.5+rng()*0.8);
+    const t=0.35+rng()*0.45;
     particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
-      color,r:2+Math.random()*3,life:0.45,max:0.45,alpha:1});
+      color:rng()>0.5?c1:c2,r:1.5+rng()*3,life:t,max:t,alpha:1,grav:180});
   }
 }
 
-function deathParticle(x,y){
-  const a=Math.random()*Math.PI*2, s=90+Math.random()*220;
-  const h=Math.random()*60;
-  particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
-    color:`hsl(${h},100%,60%)`,r:3+Math.random()*5,life:0.9+Math.random()*0.5,max:1.4,alpha:1});
+function updateParticles(dt){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    p.vy+=p.grav*dt;
+    p.vx*=0.98; p.vy*=0.98;
+    p.life-=dt;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    p.alpha=p.life/p.max;
+  }
 }
 
-function addPop(x,y,text,color){
-  popTexts.push({x,y:y-22,text,color,life:0.9,max:0.9,alpha:1,sc:1});
+function floatPush(x,y,text,color,sc){
+  floatTexts.push({x,y,text,color,life:0.85,max:0.85,alpha:1,sc:sc||1,vy:-55});
 }
 
-function emitSpeedLine(){
-  speedLines.push({x:CW+60,y:50+Math.random()*(CH-100),
-    len:45+Math.random()*90,alpha:0.3+Math.random()*0.4,life:0.3,max:0.3});
+function updateFloatTexts(dt){
+  for(let i=floatTexts.length-1;i>=0;i--){
+    const t=floatTexts[i];
+    t.y+=t.vy*dt; t.life-=dt;
+    if(t.life<=0){floatTexts.splice(i,1);continue;}
+    t.alpha=t.life/t.max;
+  }
 }
 
 // ── Draw ──────────────────────────────────────────────────────────────────────
 function draw(){
   ctx.save();
-  ctx.translate(shakeX, shakeY);
+  ctx.translate(shakeX,shakeY);
 
-  // bg gradient
-  const g=ctx.createLinearGradient(0,0,0,CH);
-  g.addColorStop(0, `hsl(${hue},42%,7%)`);
-  g.addColorStop(1, `hsl(${hue+40},52%,11%)`);
-  ctx.fillStyle=g; ctx.fillRect(0,0,CW,CH);
+  // background
+  const bg=ctx.createLinearGradient(0,0,0,CH);
+  const lum=42+Math.sin(ambientT*0.9)*4*(comboMult()-1);
+  bg.addColorStop(0,`hsl(${bgHue},38%,${6+lum*0.1}%)`);
+  bg.addColorStop(1,`hsl(${bgHue+35},48%,${10+lum*0.12}%)`);
+  ctx.fillStyle=bg;ctx.fillRect(0,0,CW,CH);
 
-  // bg silhouettes
-  ctx.save(); ctx.globalAlpha=0.05;
-  ctx.fillStyle=`hsl(${hue+60},60%,30%)`;
-  const off2=cameraX*0.1%200;
-  for(let i=-1;i<Math.ceil(CW/200)+2;i++){
-    const bx=i*200-off2;
-    ctx.beginPath(); ctx.arc(bx,0,90,0,Math.PI); ctx.fill();
-    ctx.beginPath(); ctx.arc(bx+100,CH,105,Math.PI,Math.PI*2); ctx.fill();
+  // leaf silhouettes (far layer)
+  ctx.save();ctx.globalAlpha=0.04;
+  ctx.fillStyle=`hsl(${bgHue+50},60%,40%)`;
+  for(const l of leafSil){
+    if(l.layer!==0) continue;
+    ctx.save();ctx.translate(l.x,l.y);ctx.rotate(l.rot);
+    ctx.beginPath();ctx.ellipse(0,0,l.w,l.h,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
   }
   ctx.restore();
 
-  // speed lines
-  for(const l of speedLines){
-    ctx.save();
-    ctx.globalAlpha=l.alpha*(l.life/l.max);
-    ctx.strokeStyle='#ffffff'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(l.x,l.y); ctx.lineTo(l.x+l.len,l.y); ctx.stroke();
-    ctx.restore();
-  }
-
-  // nodes
-  for(const n of nodes){
-    const nx=n.x-cameraX;
-    if(nx<-30||nx>CW+30) continue;
-    n.w+=0.025;
-    const wb=Math.sin(n.w)*2;
-    ctx.save();
-    ctx.shadowColor=n.dead?'#441100':`hsl(${hue+20},80%,50%)`;
-    ctx.shadowBlur=n.dead?4:10;
-    ctx.fillStyle=n.dead?'#553322':`hsl(${hue+20},60%,32%)`;
-    ctx.beginPath(); ctx.arc(nx+wb,n.y,n.r,0,Math.PI*2); ctx.fill();
-    if(!n.dead){
-      ctx.fillStyle=`hsl(${hue+30},90%,65%)`;
-      ctx.beginPath(); ctx.arc(nx+wb-2,n.y-2,3,0,Math.PI*2); ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // leaves
-  for(const l of leaves){
-    const lx=l.x-cameraX;
-    if(lx<-20||lx>CW+20) continue;
-    l.bob+=0.05;
-    const bob=Math.sin(l.bob)*3;
-    ctx.save();
-    ctx.shadowColor=l.gold?'#ffd700':`hsl(${hue+40},90%,50%)`;
-    ctx.shadowBlur=l.gold?14:7;
-    ctx.fillStyle=l.gold?'#ffd700':`hsl(${hue+40},80%,45%)`;
-    ctx.beginPath(); ctx.ellipse(lx,l.y+bob,l.r*1.3,l.r*0.75,Math.PI*0.25,0,Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle=l.gold?'#ffffa0':'#aaff88'; ctx.lineWidth=1; ctx.stroke();
-    ctx.restore();
-  }
-
-  // thorns
-  for(const t of thorns){
-    const tx=t.x-cameraX;
-    if(tx<-20||tx>CW+20) continue;
-    ctx.save();
-    ctx.shadowColor='#ff3300'; ctx.shadowBlur=10;
-    ctx.fillStyle='#cc1100'; ctx.strokeStyle='#ff5533'; ctx.lineWidth=1.5;
+  // mid-layer vine ropes (bezier, no sprites)
+  ctx.save();ctx.globalAlpha=0.12;
+  ctx.strokeStyle=`hsl(${bgHue+10},55%,30%)`;ctx.lineWidth=3;
+  for(let i=0;i<5;i++){
+    const ox=(ambientT*18*(i%2?1:-1)+i*80)%CW;
     ctx.beginPath();
-    for(let i=0;i<7;i++){
-      const a=(i/7)*Math.PI*2-Math.PI*0.5;
-      const r2=i%2===0?t.r:t.r*0.38;
-      if(i===0) ctx.moveTo(tx+Math.cos(a)*r2,t.y+Math.sin(a)*r2);
-      else ctx.lineTo(tx+Math.cos(a)*r2,t.y+Math.sin(a)*r2);
-    }
-    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.moveTo(ox,0);
+    ctx.bezierCurveTo(ox+40,CH*0.3,ox-40,CH*0.6,ox+20,CH);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // leaf silhouettes (near layer)
+  ctx.save();ctx.globalAlpha=0.07;
+  ctx.fillStyle=`hsl(${bgHue+60},70%,35%)`;
+  for(const l of leafSil){
+    if(l.layer!==1) continue;
+    ctx.save();ctx.translate(l.x,l.y);ctx.rotate(l.rot+ambientT*0.02);
+    ctx.beginPath();ctx.ellipse(0,0,l.w*0.7,l.h*0.7,0,0,Math.PI*2);ctx.fill();
     ctx.restore();
+  }
+  ctx.restore();
+
+  // draw anchor queue
+  for(const a of anchors){
+    if(a.grabbed||a.missed) continue;
+    const sx=worldToScreen(a.x);
+    if(sx<-80||sx>CW+80) continue;
+    drawAnchor(a,sx,a.y);
+    if(a.dual&&!a.dual.grabbed&&!a.dual.missed){
+      const dx=worldToScreen(a.dual.x);
+      drawAnchor(a.dual,dx,a.dual.y);
+    }
   }
 
-  // walls
-  for(const w of walls){
-    const wx=w.x-cameraX;
-    if(wx<-30||wx>CW+30) continue;
-    ctx.save();
-    ctx.shadowColor='#773300'; ctx.shadowBlur=7;
-    const wg=ctx.createLinearGradient(wx,0,wx+w.w,0);
-    wg.addColorStop(0,'#441100'); wg.addColorStop(1,'#885533');
-    ctx.fillStyle=wg; ctx.fillRect(wx,w.y,w.w,w.h);
-    ctx.strokeStyle='#aa6633'; ctx.lineWidth=1; ctx.strokeRect(wx,w.y,w.w,w.h);
-    // bark lines
-    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=1;
-    for(let bi=0;bi<Math.floor(w.h/15);bi++){
-      ctx.beginPath(); ctx.moveTo(wx,w.y+bi*15+7); ctx.lineTo(wx+w.w,w.y+bi*15+7); ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // spiders
-  for(const s of spiders){
-    const sx=s.x-cameraX;
-    if(sx<-30||sx>CW+30) continue;
-    ctx.save();
-    ctx.shadowColor='#aa00aa'; ctx.shadowBlur=12;
-    // thread
-    ctx.strokeStyle='rgba(180,100,200,0.3)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(sx,s.y); ctx.lineTo(sx,s.y-40); ctx.stroke();
-    // legs
-    ctx.strokeStyle='#aa44bb'; ctx.lineWidth=1.5;
-    for(let i=0;i<8;i++){
-      const la=(i/8)*Math.PI*2;
-      const la2=la+Math.sin(elapsed*5+i)*0.4;
-      ctx.beginPath();
-      ctx.moveTo(sx+Math.cos(la)*s.r, s.y+Math.sin(la)*s.r);
-      ctx.lineTo(sx+Math.cos(la2)*s.r*2.8, s.y+Math.sin(la2)*s.r*2.8);
-      ctx.stroke();
-    }
-    ctx.fillStyle='#220033';
-    ctx.beginPath(); ctx.arc(sx,s.y,s.r,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle='#dd44ff'; ctx.lineWidth=1.5; ctx.stroke();
-    // eyes
-    ctx.fillStyle='#ff44ff';
-    ctx.beginPath(); ctx.arc(sx-3,s.y-2,2,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(sx+3,s.y-2,2,0,Math.PI*2); ctx.fill();
-    ctx.restore();
-  }
-
-  // vine rope
-  if(anchored && anchorNode){
-    const ax=anchorNode.x-cameraX, ay=anchorNode.y;
-    const spd=Math.sqrt(pvx*pvx+pvy*pvy);
-    const wb=Math.sin(elapsed*8)*3*(spd/200);
-    const mx=(px+ax)*0.5+wb, my=(py+ay)*0.5;
-    ctx.save();
-    ctx.strokeStyle=`hsl(${hue+10},70%,32%)`; ctx.lineWidth=5; ctx.lineCap='round';
-    ctx.shadowColor=`hsl(${hue+10},80%,50%)`; ctx.shadowBlur=5;
-    ctx.beginPath(); ctx.moveTo(px,py); ctx.quadraticCurveTo(mx,my,ax,ay); ctx.stroke();
-    ctx.strokeStyle=`hsl(${hue+25},90%,62%)`; ctx.lineWidth=2; ctx.shadowBlur=0;
-    ctx.beginPath(); ctx.moveTo(px,py); ctx.quadraticCurveTo(mx,my,ax,ay); ctx.stroke();
-    ctx.restore();
-  }
+  // vine rope from current anchor to player
+  const{px,py,sax,say}=playerPos();
+  drawRope(sax,say,px,py);
 
   // player
-  ctx.save();
-  ctx.shadowColor=`hsl(${hue+30},100%,70%)`; ctx.shadowBlur=22;
-  ctx.strokeStyle=`hsl(${hue+20},90%,65%)`; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.arc(px,py,PLAYER_R+3,0,Math.PI*2); ctx.stroke();
-  const pg=ctx.createRadialGradient(px-3,py-3,1,px,py,PLAYER_R);
-  pg.addColorStop(0, `hsl(${hue+45},100%,82%)`);
-  pg.addColorStop(1, `hsl(${hue},80%,38%)`);
-  ctx.fillStyle=pg;
-  ctx.beginPath(); ctx.arc(px,py,PLAYER_R,0,Math.PI*2); ctx.fill();
-  const spd2=Math.sqrt(pvx*pvx+pvy*pvy);
-  if(spd2>60){
-    ctx.strokeStyle='rgba(255,255,255,0.38)'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.moveTo(px,py);
-    ctx.lineTo(px+pvx/spd2*22, py+pvy/spd2*22); ctx.stroke();
-  }
-  ctx.restore();
+  drawPlayer(px,py);
 
   // particles
   for(const p of particles){
-    ctx.save(); ctx.globalAlpha=p.alpha;
-    ctx.fillStyle=p.color; ctx.shadowColor=p.color; ctx.shadowBlur=5;
-    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+    ctx.save();ctx.globalAlpha=p.alpha;
+    ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=6;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
     ctx.restore();
   }
 
-  // pop texts
-  for(const t of popTexts){
-    ctx.save(); ctx.globalAlpha=t.alpha;
-    ctx.translate(t.x,t.y); ctx.scale(t.sc,t.sc);
-    ctx.fillStyle=t.color; ctx.shadowColor=t.color; ctx.shadowBlur=9;
-    ctx.font='bold 16px "Segoe UI",sans-serif'; ctx.textAlign='center';
+  // float texts
+  for(const t of floatTexts){
+    ctx.save();ctx.globalAlpha=t.alpha;
+    ctx.translate(t.x,t.y);ctx.scale(t.sc,t.sc);
+    ctx.fillStyle=t.color;ctx.shadowColor=t.color;ctx.shadowBlur=10;
+    ctx.font=`bold 18px "Segoe UI",sans-serif`;ctx.textAlign='center';
     ctx.fillText(t.text,0,0);
     ctx.restore();
   }
 
-  // red flash
-  if(redFlash>0){
-    ctx.save(); ctx.globalAlpha=redFlash*0.42;
-    ctx.fillStyle='#ff0000'; ctx.fillRect(0,0,CW,CH); ctx.restore();
-  }
-
-  // HUD
-  if(state==='playing'){
-    ctx.save();
-    ctx.fillStyle='rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.roundRect(8,8,154,52,8); ctx.fill();
-    ctx.fillStyle='#ffffff'; ctx.font='bold 24px "Segoe UI",sans-serif';
-    ctx.textAlign='left'; ctx.fillText(Math.floor(score),18,34);
-    ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='12px "Segoe UI",sans-serif';
-    ctx.fillText('BEST '+bestScore,18,50);
-    if(combo>0){
-      const m=mult();
-      ctx.fillStyle=m>1?`hsl(${hue+20},100%,65%)`:'rgba(255,255,255,0.6)';
-      ctx.font=`bold ${14+m*3}px "Segoe UI",sans-serif`;
-      ctx.textAlign='right';
-      ctx.fillText('x'+m+' COMBO '+combo, CW-12, 36);
-    }
+  // screen flash
+  if(flashAlpha>0.01){
+    ctx.save();ctx.globalAlpha=flashAlpha;
+    ctx.fillStyle=flashColor;ctx.fillRect(0,0,CW,CH);
     ctx.restore();
   }
 
-  ctx.restore(); // shake restore
+  // desaturation overlay
+  if(desatAlpha>0.01){
+    ctx.save();ctx.globalAlpha=desatAlpha*0.6;
+    ctx.fillStyle='rgba(200,200,200,0.5)';ctx.fillRect(0,0,CW,CH);
+    ctx.restore();
+  }
 
-  // overlay screens (no shake)
+  // HUD
+  if(state==='playing') drawHUD();
+
+  ctx.restore(); // shake
+
+  // screens (no shake)
   if(state==='start') drawStart();
   if(state==='gameover') drawGameOver();
 }
 
-function drawStart(){
+function drawAnchor(a,sx,sy){
+  if(!a.active){
+    // just a dim dot indicating upcoming anchor
+    ctx.save();
+    ctx.globalAlpha=0.35;
+    ctx.fillStyle='#446633';
+    ctx.shadowColor='#224422';ctx.shadowBlur=6;
+    ctx.beginPath();ctx.arc(sx,sy,7,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  const prog=Math.min(1,a.timer/a.winDur);
+  const ringR=a.ringR;
+
+  // outer pulsing ring
+  const pulse=Math.sin(ambientT*12)*0.15+0.85;
   ctx.save();
-  ctx.fillStyle='rgba(0,0,0,0.58)'; ctx.fillRect(0,0,CW,CH);
-  ctx.textAlign='center';
-  ctx.shadowColor='#44ff44'; ctx.shadowBlur=32;
-  ctx.fillStyle=`hsl(${hue},90%,65%)`; ctx.font='bold 60px "Segoe UI",sans-serif';
-  ctx.fillText('VINE',CW/2,CH*0.34);
-  ctx.fillStyle=`hsl(${hue+40},100%,70%)`; ctx.font='bold 50px "Segoe UI",sans-serif';
-  ctx.fillText('RUSH',CW/2,CH*0.34+62);
-  ctx.shadowBlur=0;
-  ctx.fillStyle='rgba(255,255,255,0.68)'; ctx.font='14px "Segoe UI",sans-serif';
-  ctx.fillText('Snap to branches  •  Collect leaves  •  Dodge hazards',CW/2,CH*0.55);
-  const p=0.68+0.32*Math.sin(Date.now()*0.004);
-  ctx.globalAlpha=p; ctx.fillStyle='#ffffff';
-  ctx.font='bold 22px "Segoe UI",sans-serif'; ctx.fillText('TAP TO START',CW/2,CH*0.7);
+  ctx.globalAlpha=0.3*(1-prog*0.5)*pulse;
+  ctx.strokeStyle='#aaffaa';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(sx,sy,ringR*1.2,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+
+  // main ring - color depends on state
+  let ringColor='#44ff44';
+  if(prog>0.72) ringColor='#ffd700';        // gold core zone
+  else if(prog>0.45) ringColor='#aaff22';    // narrowing
+
+  ctx.save();
+  ctx.globalAlpha=0.8-prog*0.3;
+  ctx.strokeStyle=ringColor;ctx.lineWidth=3;
+  ctx.shadowColor=ringColor;ctx.shadowBlur=12;
+  ctx.beginPath();ctx.arc(sx,sy,ringR,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+
+  // gold core inner circle
+  if(prog>0.65){
+    const ca=Math.min(1,(prog-0.65)/0.35);
+    ctx.save();
+    ctx.globalAlpha=ca*0.9;
+    ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=18;
+    ctx.beginPath();ctx.arc(sx,sy,GOLD_R,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+
+  // center node
+  const nodeColor=a.revealed
+    ?(a.type==='THORN'?'#ff3300':a.type==='RUSH'?'#ff8800':'#22cc44')
+    :'#335533';
+  ctx.save();
+  ctx.fillStyle=nodeColor;
+  ctx.shadowColor=nodeColor;ctx.shadowBlur=a.revealed?14:5;
+  ctx.strokeStyle=a.revealed?(a.type==='THORN'?'#ff6644':a.type==='RUSH'?'#ffaa44':'#88ff88'):'#557755';
+  ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(sx,sy,10,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  // type icon (after reveal)
+  if(a.revealed){
+    ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='bold 10px sans-serif';
+    const icon=a.type==='THORN'?'✕':a.type==='RUSH'?'▶':'★';
+    ctx.shadowBlur=0;
+    ctx.fillText(icon,sx,sy);
+  }
+  ctx.restore();
+
+  // window arc (shows time remaining)
+  const arcA=-Math.PI*0.5;
+  const arcEnd=arcA+Math.PI*2*(1-prog);
+  ctx.save();
+  ctx.globalAlpha=0.5;
+  ctx.strokeStyle=prog>0.72?'#ffd700':'#55ff55';
+  ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.arc(sx,sy,ringR+8,arcA,arcEnd);ctx.stroke();
   ctx.restore();
 }
 
-function drawGameOver(){
+function drawRope(ax,ay,px,py){
+  const mx=(ax+px)*0.5+(Math.sin(ambientT*4)*4);
+  const my=(ay+py)*0.5;
   ctx.save();
-  ctx.fillStyle='rgba(0,0,0,0.62)'; ctx.fillRect(0,0,CW,CH);
-  ctx.textAlign='center';
-  ctx.shadowColor='#ff4422'; ctx.shadowBlur=22;
-  ctx.fillStyle='#ff6644'; ctx.font='bold 48px "Segoe UI",sans-serif';
-  ctx.fillText('GAME OVER',CW/2,CH*0.3);
-  ctx.shadowBlur=0;
-  ctx.fillStyle='#ffffff'; ctx.font='bold 34px "Segoe UI",sans-serif';
-  ctx.fillText(Math.floor(score),CW/2,CH*0.45);
-  ctx.fillStyle='rgba(255,255,255,0.52)'; ctx.font='16px "Segoe UI",sans-serif';
-  ctx.fillText('SCORE',CW/2,CH*0.45+24);
-  if(Math.floor(score)>=bestScore && bestScore>0){
-    ctx.fillStyle='#ffd700'; ctx.shadowColor='#ffd700'; ctx.shadowBlur=16;
-    ctx.font='bold 18px "Segoe UI",sans-serif'; ctx.fillText('NEW BEST!',CW/2,CH*0.54);
-    ctx.shadowBlur=0;
-  } else {
-    ctx.fillStyle='rgba(255,255,255,0.48)'; ctx.font='14px "Segoe UI",sans-serif';
-    ctx.fillText('BEST: '+bestScore,CW/2,CH*0.54);
-  }
-  const p=0.68+0.32*Math.sin(Date.now()*0.004);
-  ctx.globalAlpha=p; ctx.fillStyle='#ffffff';
-  ctx.font='bold 22px "Segoe UI",sans-serif'; ctx.fillText('TAP TO RETRY',CW/2,CH*0.7);
+  const rc=`hsl(${bgHue+10},60%,28%)`;
+  ctx.strokeStyle=rc;ctx.lineWidth=5;ctx.lineCap='round';
+  ctx.shadowColor=`hsl(${bgHue+10},70%,45%)`;ctx.shadowBlur=4;
+  ctx.beginPath();ctx.moveTo(px,py);ctx.quadraticCurveTo(mx,my,ax,ay);ctx.stroke();
+  // bright highlight
+  ctx.strokeStyle=`hsl(${bgHue+20},85%,55%)`;ctx.lineWidth=1.5;ctx.shadowBlur=0;
+  ctx.beginPath();ctx.moveTo(px,py);ctx.quadraticCurveTo(mx,my,ax,ay);ctx.stroke();
   ctx.restore();
+}
+
+function drawPlayer(px,py){
+  ctx.save();
+  const vineHue=80+Math.min(streak,6)*20; // green->yellow->orange->white
+  ctx.shadowColor=`hsl(${vineHue},100%,70%)`;ctx.shadowBlur=24;
+  // outer glow ring
+  ctx.strokeStyle=`hsl(${vineHue+15},90%,65%)`;ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(px,py,15*pStretch,0,Math.PI*2);ctx.stroke();
+  // body
+  const pg=ctx.createRadialGradient(px-3,py-3,1,px,py,13);
+  pg.addColorStop(0,`hsl(${vineHue+40},100%,82%)`);
+  pg.addColorStop(1,`hsl(${vineHue},80%,38%)`);
+  ctx.fillStyle=pg;
+  ctx.save();
+  ctx.translate(px,py);
+  ctx.scale(pStretch,pSquish);
+  ctx.translate(-px,-py);
+  ctx.beginPath();ctx.arc(px,py,13,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  // eyes
+  ctx.fillStyle='#ffffff';
+  ctx.beginPath();ctx.arc(px+4,py-3,3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(px-4,py-3,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#001100';
+  ctx.beginPath();ctx.arc(px+5,py-3,1.5,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(px-3,py-3,1.5,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+
+function drawHUD(){
+  // score box
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.4)';
+  ctx.beginPath();roundRect(ctx,8,8,160,56,8);ctx.fill();
+  ctx.fillStyle='#ffffff';ctx.font='bold 26px "Segoe UI",sans-serif';
+  ctx.textAlign='left';ctx.fillText(Math.floor(score),18,36);
+  ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='12px "Segoe UI",sans-serif';
+  ctx.fillText('BEST '+bestScore,18,52);
+  ctx.restore();
+
+  // lives
+  for(let i=0;i<LIVES;i++){
+    const lx=CW-24-i*22, ly=22;
+    const alive=i<lives;
+    ctx.save();
+    ctx.fillStyle=alive?'#44ff44':'#223322';
+    ctx.shadowColor=alive?'#44ff44':'transparent';ctx.shadowBlur=alive?8:0;
+    ctx.beginPath();ctx.arc(lx,ly,7,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+
+  // combo
+  if(streak>1){
+    const m=comboMult();
+    const ch=80+streak*8;
+    ctx.save();
+    ctx.fillStyle=`hsl(${ch},100%,65%)`;
+    ctx.shadowColor=`hsl(${ch},100%,65%)`;ctx.shadowBlur=12;
+    ctx.font=`bold ${16+m*2}px "Segoe UI",sans-serif`;
+    ctx.textAlign='center';
+    ctx.fillText(`×${m} STREAK ${streak}`,CW/2,CH-18);
+    ctx.restore();
+  }
+
+  // rush counter
+  if(rushCount>0){
+    ctx.save();
+    ctx.fillStyle='#ff8800';ctx.shadowColor='#ff8800';ctx.shadowBlur=10;
+    ctx.font='bold 14px "Segoe UI",sans-serif';ctx.textAlign='right';
+    ctx.fillText(`RUSH ×${rushCount}`,CW-12,50);
+    ctx.restore();
+  }
+
+  // challenge banner
+  if(challengeScore>0){
+    ctx.save();
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.beginPath();roundRect(ctx,CW/2-80,72,160,26,6);ctx.fill();
+    const beatDiff=Math.floor(score)-challengeScore;
+    ctx.fillStyle=beatDiff>=0?'#44ff44':'#ffaa44';
+    ctx.font='bold 13px "Segoe UI",sans-serif';ctx.textAlign='center';
+    ctx.fillText(`Beat ${challengeScore}: ${beatDiff>=0?'+':''+(beatDiff)}`,CW/2,90);
+    ctx.restore();
+  }
+}
+
+function roundRect(c,x,y,w,h,r){
+  c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);
+  c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);
+  c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);
+  c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);
+  c.quadraticCurveTo(x,y,x+r,y);c.closePath();
+}
+
+function drawStart(){
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(0,0,CW,CH);
+  ctx.textAlign='center';
+
+  // title
+  ctx.shadowColor='#44ff44';ctx.shadowBlur=36;
+  ctx.fillStyle=`hsl(${bgHue},90%,65%)`;
+  ctx.font='bold 68px "Segoe UI",sans-serif';ctx.fillText('VINE',CW/2,CH*0.3);
+  ctx.fillStyle=`hsl(${bgHue+35},100%,70%)`;
+  ctx.font='bold 56px "Segoe UI",sans-serif';ctx.fillText('RUSH',CW/2,CH*0.3+70);
+  ctx.shadowBlur=0;
+
+  // instructions
+  ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='14px "Segoe UI",sans-serif';
+  ctx.fillText('Grab anchors to keep swinging',CW/2,CH*0.52);
+  ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='13px "Segoe UI",sans-serif';
+  ctx.fillText('Wait for the gold core — perfect timing = big score',CW/2,CH*0.57);
+  ctx.fillText('★ GOLD  •  ✕ THORN (avoid!)  •  ▶ RUSH',CW/2,CH*0.63);
+
+  // tap prompt pulse
+  const p=0.65+0.35*Math.sin(Date.now()*0.004);
+  ctx.globalAlpha=p;ctx.fillStyle='#ffffff';
+  ctx.shadowColor='#ffffff';ctx.shadowBlur=16;
+  ctx.font='bold 24px "Segoe UI",sans-serif';ctx.fillText('TAP TO START',CW/2,CH*0.76);
+  ctx.restore();
+}
+
+let _goScore=0,_goBest=0,_goNewBest=false;
+function drawGameOver(){
+  // capture values on first frame
+  if(gameOverTimer<0.05){
+    _goScore=Math.floor(score);
+    _goBest=bestScore;
+    _goNewBest=_goScore>=_goBest&&_goBest>0||_goScore>0&&_goBest===_goScore;
+  }
+
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.65)';ctx.fillRect(0,0,CW,CH);
+  ctx.textAlign='center';
+
+  // GAME OVER title
+  ctx.shadowColor='#ff4422';ctx.shadowBlur=26;
+  ctx.fillStyle='#ff6644';ctx.font='bold 52px "Segoe UI",sans-serif';
+  ctx.fillText('GAME OVER',CW/2,CH*0.26);
+  ctx.shadowBlur=0;
+
+  // score
+  ctx.fillStyle='#ffffff';ctx.font='bold 44px "Segoe UI",sans-serif';
+  ctx.fillText(_goScore,CW/2,CH*0.38);
+  ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='14px "Segoe UI",sans-serif';
+  ctx.fillText('SCORE',CW/2,CH*0.38+22);
+
+  // peak combo
+  if(peakCombo>1){
+    ctx.fillStyle='rgba(255,220,100,0.7)';ctx.font='13px "Segoe UI",sans-serif';
+    ctx.fillText(`Best streak: ×${peakCombo}`,CW/2,CH*0.38+44);
+  }
+
+  // best compare
+  if(_goNewBest){
+    ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=18;
+    ctx.font='bold 20px "Segoe UI",sans-serif';ctx.fillText('✦ NEW BEST! ✦',CW/2,CH*0.51);
+    ctx.shadowBlur=0;
+  } else if(_goBest>0){
+    const diff=_goScore-_goBest;
+    ctx.fillStyle=diff>=0?'#44ff44':'rgba(255,255,255,0.45)';
+    ctx.font='14px "Segoe UI",sans-serif';
+    ctx.fillText(diff>=0?`+${diff} over your best!`:`${diff} from your best (${_goBest})`,CW/2,CH*0.51);
+  }
+
+  // restart button with countdown ring
+  const btnX=CW/2, btnY=CH*0.63, btnR=36;
+  ctx.save();
+  ctx.fillStyle=retryLocked?'rgba(255,255,255,0.12)':'rgba(255,255,255,0.18)';
+  ctx.shadowColor=retryLocked?'transparent':'#ffffff';ctx.shadowBlur=retryLocked?0:12;
+  ctx.beginPath();ctx.arc(btnX,btnY,btnR,0,Math.PI*2);ctx.fill();
+
+  if(retryLocked){
+    // countdown arc
+    const arcEnd=-Math.PI*0.5+Math.PI*2*retryRingProg;
+    ctx.strokeStyle='#ffffff';ctx.lineWidth=3;ctx.globalAlpha=0.6;
+    ctx.beginPath();ctx.arc(btnX,btnY,btnR+4,-Math.PI*0.5,arcEnd);ctx.stroke();
+  } else {
+    ctx.strokeStyle='#ffffff';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(btnX,btnY,btnR+4,0,Math.PI*2);ctx.stroke();
+  }
+
+  ctx.fillStyle=retryLocked?'rgba(255,255,255,0.35)':'#ffffff';
+  ctx.font='bold 14px "Segoe UI",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.shadowBlur=0;
+  ctx.fillText(retryLocked?'WAIT':'RETRY',btnX,btnY);
+  ctx.textBaseline='alphabetic';
+  ctx.restore();
+
+  // share button (on new best or milestone)
+  const isShare=_goNewBest||_goScore>=50;
+  if(isShare&&!retryLocked){
+    const sp=0.7+0.3*Math.sin(Date.now()*0.006);
+    ctx.save();ctx.globalAlpha=sp;
+    ctx.fillStyle='rgba(255,215,0,0.18)';ctx.shadowColor='#ffd700';ctx.shadowBlur=14;
+    ctx.beginPath();roundRect(ctx,CW/2-55,CH*0.73,110,34,8);ctx.fill();
+    ctx.fillStyle='#ffd700';ctx.font='bold 14px "Segoe UI",sans-serif';
+    ctx.fillText('SHARE SCORE',CW/2,CH*0.73+22);
+    ctx.restore();
+  }
+
+  // hint
+  ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='12px "Segoe UI",sans-serif';
+  ctx.fillText('Tap earlier for safety • Wait for gold for glory',CW/2,CH*0.84);
+
+  // ad space
+  ctx.fillStyle='rgba(255,255,255,0.0)';ctx.fillRect(0,CH*0.87,CW,100);
+
+  ctx.restore();
+
+  // share tap detection is handled on pointer events (see below)
+}
+
+// ── Share ─────────────────────────────────────────────────────────────────────
+canvas.addEventListener('pointerdown', e=>{
+  if(state!=='gameover') return;
+  const r=canvas.getBoundingClientRect();
+  const sx=(e.clientX-r.left)*(CW/r.width);
+  const sy=(e.clientY-r.top)*(CH/r.height);
+  const isShare=(_goNewBest||_goScore>=50)&&!retryLocked;
+  if(isShare){
+    const by=CH*0.73, bh=34;
+    if(sy>=by&&sy<=by+bh&&sx>=CW/2-55&&sx<=CW/2+55){
+      doShare();
+      return;
+    }
+  }
+},{capture:true});
+
+function doShare(){
+  const url=`https://balinti.github.io/vine-rush/?challenge=${_goScore}`;
+  const text=`I grabbed the gold core at VINE RUSH — score: ${_goScore}. Can you beat it? ${url}`;
+  if(navigator.share){
+    navigator.share({title:'Vine Rush',text,url}).catch(()=>{});
+  } else {
+    navigator.clipboard&&navigator.clipboard.writeText(text);
+    floatPush(CW/2,CH*0.7,'Copied!','#ffd700',1.2);
+  }
 }
 
 // ── Loop ──────────────────────────────────────────────────────────────────────
-let lastT = 0;
 function loop(ts){
   requestAnimationFrame(loop);
-  const dt = Math.min((ts-lastT)/1000, 0.05);
-  lastT = ts;
+  const raw=(ts-lastTs)/1000;
+  lastTs=ts;
+  const dt=Math.min(raw,0.05);
   if(state==='playing') update(dt);
+  else if(state==='gameover') update(dt);
+  else if(state==='start'){ambientT+=dt;bgHue=100+Math.sin(ambientT*0.08)*20;}
   draw();
 }
-requestAnimationFrame(ts=>{ lastT=ts; requestAnimationFrame(loop); });
+requestAnimationFrame(ts=>{lastTs=ts;requestAnimationFrame(loop);});
 
 })();
 </script>
